@@ -5,7 +5,7 @@ import (
 	"os"
 	"path/filepath"
 
-	_ "github.com/mattn/go-sqlite3"
+	_ "modernc.org/sqlite"
 )
 
 var DB *sql.DB
@@ -40,7 +40,8 @@ func InitDB() error {
 
 	dbPath := filepath.Join(dataDir, "shifts.db")
 	var err error
-	DB, err = sql.Open("sqlite3", dbPath+"?_foreign_keys=1")
+	// modernc.org/sqlite uses "sqlite" as driver name, not "sqlite3"
+	DB, err = sql.Open("sqlite", dbPath+"?_foreign_keys=1")
 	if err != nil {
 		return err
 	}
