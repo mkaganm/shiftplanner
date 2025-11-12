@@ -12,7 +12,28 @@ var DB *sql.DB
 
 // InitDB initializes the database and creates the schema
 func InitDB() error {
-	dataDir := "../../data"
+	// Try multiple possible paths relative to different execution contexts
+	var dataDir string
+	possiblePaths := []string{
+		"../../../data", // From backend/cmd/server
+		"../../data",    // From backend
+		"../data",       // From project root
+		"data",          // Current directory
+	}
+
+	for _, path := range possiblePaths {
+		absPath, _ := filepath.Abs(path)
+		if _, err := os.Stat(filepath.Dir(absPath)); err == nil {
+			dataDir = absPath
+			break
+		}
+	}
+
+	if dataDir == "" {
+		// Default to project root/data
+		dataDir, _ = filepath.Abs("../../../data")
+	}
+
 	if err := os.MkdirAll(dataDir, 0755); err != nil {
 		return err
 	}
