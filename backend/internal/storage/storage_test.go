@@ -17,7 +17,7 @@ func setupTestDB(t *testing.T) int {
 	os.Remove(testDBPath) // Remove if exists
 
 	var err error
-	database.DB, err = sql.Open("sqlite3", testDBPath)
+	database.DB, err = sql.Open("sqlite", testDBPath)
 	if err != nil {
 		t.Fatalf("Failed to create test database: %v", err)
 	}
