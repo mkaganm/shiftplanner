@@ -1,39 +1,37 @@
 package api
 
 import (
-	"context"
-	"net/http"
 	"shiftplanner/backend/internal/auth"
+
+	"github.com/gofiber/fiber/v2"
 )
 
-type contextKey string
-
-const userIDContextKey contextKey = "userID"
+const userIDKey = "userID"
 
 // AuthMiddleware authentication middleware
-func AuthMiddleware(next http.HandlerFunc) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		token := r.Header.Get("Authorization")
-		if token == "" {
-			http.Error(w, "Unauthorized", http.StatusUnauthorized)
-			return
-		}
-
-		userID, err := auth.ValidateToken(token)
-		if err != nil {
-			http.Error(w, "Unauthorized", http.StatusUnauthorized)
-			return
-		}
-
-		// Add UserID to request context
-		ctx := context.WithValue(r.Context(), userIDContextKey, userID)
-		next(w, r.WithContext(ctx))
+func AuthMiddleware(c *fiber.Ctx) error {
+	token := c.Get("Authorization")
+	if token == "" {
+		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
+			"error": "Unauthorized",
+		})
 	}
+
+	userID, err := auth.ValidateToken(token)
+	if err != nil {
+		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
+			"error": "Unauthorized",
+		})
+	}
+
+	// Add UserID to locals
+	c.Locals(userIDKey, userID)
+	return c.Next()
 }
 
-// GetUserID gets user ID from request context
-func GetUserID(r *http.Request) int {
-	if userID, ok := r.Context().Value(userIDContextKey).(int); ok {
+// GetUserID gets user ID from Fiber context
+func GetUserID(c *fiber.Ctx) int {
+	if userID, ok := c.Locals(userIDKey).(int); ok {
 		return userID
 	}
 	return 0

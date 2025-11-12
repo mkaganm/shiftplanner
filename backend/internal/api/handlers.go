@@ -1,115 +1,99 @@
 package api
 
 import (
-	"encoding/json"
-	"net/http"
 	"shiftplanner/backend/internal/models"
 	"shiftplanner/backend/internal/scheduler"
 	"shiftplanner/backend/internal/storage"
 	"strconv"
-	"strings"
 	"time"
+
+	"github.com/gofiber/fiber/v2"
 )
 
 // GetMembers returns all members
-func GetMembers(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodGet {
-		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
-		return
-	}
-
-	userID := GetUserID(r)
+func GetMembers(c *fiber.Ctx) error {
+	userID := GetUserID(c)
 	if userID == 0 {
-		http.Error(w, "Unauthorized", http.StatusUnauthorized)
-		return
+		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
+			"error": "Unauthorized",
+		})
 	}
 
 	members, err := storage.GetAllMembers(userID)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": err.Error(),
+		})
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(members)
+	return c.JSON(members)
 }
 
 // CreateMember creates a new member
-func CreateMember(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
-		return
-	}
-
-	userID := GetUserID(r)
+func CreateMember(c *fiber.Ctx) error {
+	userID := GetUserID(c)
 	if userID == 0 {
-		http.Error(w, "Unauthorized", http.StatusUnauthorized)
-		return
+		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
+			"error": "Unauthorized",
+		})
 	}
 
 	var req struct {
 		Name string `json:"name"`
 	}
 
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
-		return
+	if err := c.BodyParser(&req); err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error": err.Error(),
+		})
 	}
 
 	if req.Name == "" {
-		http.Error(w, "Name is required", http.StatusBadRequest)
-		return
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error": "Name is required",
+		})
 	}
 
 	member, err := storage.CreateMember(userID, req.Name)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": err.Error(),
+		})
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusCreated)
-	json.NewEncoder(w).Encode(member)
+	return c.Status(fiber.StatusCreated).JSON(member)
 }
 
 // DeleteMember deletes a member
-func DeleteMember(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodDelete {
-		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
-		return
-	}
-
-	userID := GetUserID(r)
+func DeleteMember(c *fiber.Ctx) error {
+	userID := GetUserID(c)
 	if userID == 0 {
-		http.Error(w, "Unauthorized", http.StatusUnauthorized)
-		return
+		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
+			"error": "Unauthorized",
+		})
 	}
 
-	// Extract ID from URL: /api/members/:id
-	path := strings.TrimPrefix(r.URL.Path, "/api/members/")
-	memberID, err := strconv.Atoi(path)
+	// Extract ID from URL parameter
+	memberID, err := strconv.Atoi(c.Params("id"))
 	if err != nil {
-		http.Error(w, "Invalid member ID", http.StatusBadRequest)
-		return
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error": "Invalid member ID",
+		})
 	}
 
 	if err := storage.DeleteMember(userID, memberID); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": err.Error(),
+		})
 	}
 
-	w.WriteHeader(http.StatusNoContent)
+	return c.SendStatus(fiber.StatusNoContent)
 }
 
 // GetShifts returns shifts
-func GetShifts(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodGet {
-		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
-		return
-	}
-
-	startDateStr := r.URL.Query().Get("start_date")
-	endDateStr := r.URL.Query().Get("end_date")
+func GetShifts(c *fiber.Ctx) error {
+	startDateStr := c.Query("start_date")
+	endDateStr := c.Query("end_date")
 
 	var startDate, endDate time.Time
 	var err error
@@ -117,8 +101,9 @@ func GetShifts(w http.ResponseWriter, r *http.Request) {
 	if startDateStr != "" {
 		startDate, err = time.Parse("2006-01-02", startDateStr)
 		if err != nil {
-			http.Error(w, "Invalid start_date format (use YYYY-MM-DD)", http.StatusBadRequest)
-			return
+			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+				"error": "Invalid start_date format (use YYYY-MM-DD)",
+			})
 		}
 	} else {
 		startDate = time.Now().AddDate(0, -1, 0) // Last 1 month
@@ -127,30 +112,34 @@ func GetShifts(w http.ResponseWriter, r *http.Request) {
 	if endDateStr != "" {
 		endDate, err = time.Parse("2006-01-02", endDateStr)
 		if err != nil {
-			http.Error(w, "Invalid end_date format (use YYYY-MM-DD)", http.StatusBadRequest)
-			return
+			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+				"error": "Invalid end_date format (use YYYY-MM-DD)",
+			})
 		}
 	} else {
 		endDate = time.Now().AddDate(0, 1, 0) // Next 1 month
 	}
 
-	userID := GetUserID(r)
+	userID := GetUserID(c)
 	if userID == 0 {
-		http.Error(w, "Unauthorized", http.StatusUnauthorized)
-		return
+		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
+			"error": "Unauthorized",
+		})
 	}
 
 	shifts, err := storage.GetShiftsByDateRange(userID, startDate, endDate)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": err.Error(),
+		})
 	}
 
-	// Üye isimlerini ekle
+	// Add member names
 	members, err := storage.GetAllMembers(userID)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": err.Error(),
+		})
 	}
 
 	memberMap := make(map[int]string)
@@ -162,61 +151,62 @@ func GetShifts(w http.ResponseWriter, r *http.Request) {
 		shifts[i].MemberName = memberMap[shifts[i].MemberID]
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(shifts)
+	return c.JSON(shifts)
 }
 
 // GenerateShifts creates a new shift plan
-func GenerateShifts(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
-		return
-	}
-
+func GenerateShifts(c *fiber.Ctx) error {
 	var req scheduler.PlanShiftRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
-		return
+	if err := c.BodyParser(&req); err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error": err.Error(),
+		})
 	}
 
 	if req.StartDate.IsZero() || req.EndDate.IsZero() {
-		http.Error(w, "start_date and end_date are required", http.StatusBadRequest)
-		return
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error": "start_date and end_date are required",
+		})
 	}
 
-	userID := GetUserID(r)
+	userID := GetUserID(c)
 	if userID == 0 {
-		http.Error(w, "Unauthorized", http.StatusUnauthorized)
-		return
+		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
+			"error": "Unauthorized",
+		})
 	}
 
 	// Create plan
 	shifts, err := scheduler.PlanShift(userID, req.StartDate, req.EndDate)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": err.Error(),
+		})
 	}
 
 	// Delete existing shifts (in the same date range)
 	if err := storage.DeleteShiftsByDateRange(userID, req.StartDate, req.EndDate); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": err.Error(),
+		})
 	}
 
 	// Save new shifts
 	for _, shift := range shifts {
 		_, err := storage.CreateShift(userID, shift.MemberID, shift.StartDate, shift.EndDate, shift.IsLongShift)
 		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return
+			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+				"error": err.Error(),
+			})
 		}
 	}
 
 	// Add member names
 	members, err := storage.GetAllMembers(userID)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": err.Error(),
+		})
 	}
 
 	memberMap := make(map[int]string)
@@ -228,46 +218,36 @@ func GenerateShifts(w http.ResponseWriter, r *http.Request) {
 		shifts[i].MemberName = memberMap[shifts[i].MemberID]
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusCreated)
-	json.NewEncoder(w).Encode(shifts)
+	return c.Status(fiber.StatusCreated).JSON(shifts)
 }
 
 // GetHolidays returns public holidays
-func GetHolidays(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodGet {
-		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
-		return
-	}
-
+func GetHolidays(c *fiber.Ctx) error {
 	holidays := models.GetAllHolidays()
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(holidays)
+	return c.JSON(holidays)
 }
 
 // GetStats returns member statistics
-func GetStats(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodGet {
-		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
-		return
-	}
-
-	userID := GetUserID(r)
+func GetStats(c *fiber.Ctx) error {
+	userID := GetUserID(c)
 	if userID == 0 {
-		http.Error(w, "Unauthorized", http.StatusUnauthorized)
-		return
+		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
+			"error": "Unauthorized",
+		})
 	}
 
 	members, err := storage.GetAllMembers(userID)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": err.Error(),
+		})
 	}
 
 	stats, err := storage.GetAllMembersStats(userID)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": err.Error(),
+		})
 	}
 
 	type MemberStatResponse struct {
@@ -288,6 +268,5 @@ func GetStats(w http.ResponseWriter, r *http.Request) {
 		})
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(response)
+	return c.JSON(response)
 }
