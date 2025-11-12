@@ -1,0 +1,22 @@
+# Data directory
+data/
+*.db
+*.db-journal
+
+# Build artifacts
+*.exe
+shiftplanner.exe
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+
