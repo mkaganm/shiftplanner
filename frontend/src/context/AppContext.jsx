@@ -44,6 +44,7 @@ export function AppProvider({ children }) {
     try {
       setLoading(true);
       const data = await shiftsAPI.get(startDate, endDate);
+      console.log('Loaded shifts:', data);
       setShifts(Array.isArray(data) ? data : []);
     } catch (error) {
       console.error('Error loading shifts:', error);

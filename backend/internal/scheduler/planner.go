@@ -80,12 +80,13 @@ func PlanShift(userID int, startDate, endDate time.Time) ([]models.Shift, error)
 	for !currentDate.After(endDate) {
 		// Is today a working day?
 		if models.IsWorkingDay(currentDate) {
-			// Working day - select new shift person
-			// First find the member with least total shift days
-			selectedMemberID := selectMember(memberIDs, stats)
-
 			// Will it be a long shift? (is tomorrow a holiday or weekend?)
 			isLongShift := models.WillBeLongShift(currentDate)
+
+			// Select member based on shift type
+			// Long shift: select member with least long shift count
+			// Normal shift: select member with least normal shift count
+			selectedMemberID := selectMember(memberIDs, stats, isLongShift)
 
 			// Calculate shift end date
 			endDateForShift := currentDate
@@ -133,34 +134,69 @@ func PlanShift(userID int, startDate, endDate time.Time) ([]models.Shift, error)
 	return shifts, nil
 }
 
-// selectMember selects the most suitable member (least total shift days, in case of tie least long shifts)
-func selectMember(memberIDs []int, stats map[int]models.MemberStats) int {
+// selectMember selects the most suitable member
+// For long shifts: selects member with least long shift count
+// For normal shifts: selects member with least normal shift count (total days - long shift days)
+func selectMember(memberIDs []int, stats map[int]models.MemberStats, isLongShift bool) int {
 	if len(memberIDs) == 0 {
 		return 0
 	}
 
 	selectedID := memberIDs[0]
-	minTotalDays := stats[selectedID].TotalDays
-	minLongShifts := stats[selectedID].LongShiftCount
 
-	for _, id := range memberIDs {
-		memberStats := stats[id]
+	if isLongShift {
+		// For long shifts: select member with least long shift count
+		minLongShifts := stats[selectedID].LongShiftCount
 
-		// First check total days count
-		if memberStats.TotalDays < minTotalDays {
-			selectedID = id
-			minTotalDays = memberStats.TotalDays
-			minLongShifts = memberStats.LongShiftCount
-		} else if memberStats.TotalDays == minTotalDays {
-			// In case of tie, check long shift count
+		for _, id := range memberIDs {
+			memberStats := stats[id]
 			if memberStats.LongShiftCount < minLongShifts {
 				selectedID = id
 				minLongShifts = memberStats.LongShiftCount
+			} else if memberStats.LongShiftCount == minLongShifts {
+				// In case of tie, select member with least total days
+				if memberStats.TotalDays < stats[selectedID].TotalDays {
+					selectedID = id
+				}
+			}
+		}
+	} else {
+		// For normal shifts: select member with least normal shift count
+		// Normal shift count = total days - (long shift count * average long shift days)
+		// For simplicity, we use total days - long shift count as approximation
+		// Better approach: calculate actual normal shift days
+		selectedID = memberIDs[0]
+		minNormalShifts := calculateNormalShiftCount(stats[selectedID])
+
+		for _, id := range memberIDs {
+			memberStats := stats[id]
+			normalShiftCount := calculateNormalShiftCount(memberStats)
+
+			if normalShiftCount < minNormalShifts {
+				selectedID = id
+				minNormalShifts = normalShiftCount
+			} else if normalShiftCount == minNormalShifts {
+				// In case of tie, select member with least total days
+				if memberStats.TotalDays < stats[selectedID].TotalDays {
+					selectedID = id
+				}
 			}
 		}
 	}
 
 	return selectedID
+}
+
+// calculateNormalShiftCount calculates the number of normal shift days
+// Normal shift days = total days - long shift days
+// We approximate long shift days as long shift count * average days per long shift
+// For simplicity, we use: total days - long shift count
+// This gives us a reasonable approximation for normal shift distribution
+func calculateNormalShiftCount(stats models.MemberStats) int {
+	// Normal shift count approximation: total days - long shift count
+	// This assumes each long shift is roughly 1 day more than normal shift
+	// In reality, we should calculate actual normal shift days from database
+	return stats.TotalDays - stats.LongShiftCount
 }
 
 // updateStats updates statistics

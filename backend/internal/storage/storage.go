@@ -145,30 +145,64 @@ func GetShiftsByDateRange(userID int, startDate, endDate time.Time) ([]models.Sh
 		}
 
 		// Parse start_date - normalize to UTC midnight
+		// Support both "2006-01-02" and ISO 8601 formats
 		if startDateStr == "" {
 			log.Printf("Warning: Shift ID %d has empty start_date, skipping", s.ID)
 			continue
 		}
-		if t, err := time.Parse("2006-01-02", startDateStr); err == nil {
-			// Normalize to UTC midnight
-			s.StartDate = time.Date(t.Year(), t.Month(), t.Day(), 0, 0, 0, 0, time.UTC)
+		
+		var startTime time.Time
+		
+		// Try parsing as "2006-01-02" first
+		if t, parseErr := time.Parse("2006-01-02", startDateStr); parseErr == nil {
+			startTime = t
 		} else {
-			log.Printf("Error parsing start_date '%s' for shift ID %d: %v", startDateStr, s.ID, err)
-			continue
+			// Try parsing as ISO 8601 format (with time)
+			if t, parseErr := time.Parse(time.RFC3339, startDateStr); parseErr == nil {
+				startTime = t
+			} else {
+				// Try parsing as "2006-01-02T15:04:05Z" format
+				if t, parseErr := time.Parse("2006-01-02T15:04:05Z", startDateStr); parseErr == nil {
+					startTime = t
+				} else {
+					log.Printf("Error parsing start_date '%s' for shift ID %d: %v", startDateStr, s.ID, parseErr)
+					continue
+				}
+			}
 		}
+		
+		// Normalize to UTC midnight
+		s.StartDate = time.Date(startTime.Year(), startTime.Month(), startTime.Day(), 0, 0, 0, 0, time.UTC)
 
 		// Parse end_date - normalize to UTC midnight
+		// Support both "2006-01-02" and ISO 8601 formats
 		if endDateStr == "" {
 			log.Printf("Warning: Shift ID %d has empty end_date, skipping", s.ID)
 			continue
 		}
-		if t, err := time.Parse("2006-01-02", endDateStr); err == nil {
-			// Normalize to UTC midnight
-			s.EndDate = time.Date(t.Year(), t.Month(), t.Day(), 0, 0, 0, 0, time.UTC)
+		
+		var endTime time.Time
+		
+		// Try parsing as "2006-01-02" first
+		if t, parseErr := time.Parse("2006-01-02", endDateStr); parseErr == nil {
+			endTime = t
 		} else {
-			log.Printf("Error parsing end_date '%s' for shift ID %d: %v", endDateStr, s.ID, err)
-			continue
+			// Try parsing as ISO 8601 format (with time)
+			if t, parseErr := time.Parse(time.RFC3339, endDateStr); parseErr == nil {
+				endTime = t
+			} else {
+				// Try parsing as "2006-01-02T15:04:05Z" format
+				if t, parseErr := time.Parse("2006-01-02T15:04:05Z", endDateStr); parseErr == nil {
+					endTime = t
+				} else {
+					log.Printf("Error parsing end_date '%s' for shift ID %d: %v", endDateStr, s.ID, parseErr)
+					continue
+				}
+			}
 		}
+		
+		// Normalize to UTC midnight
+		s.EndDate = time.Date(endTime.Year(), endTime.Month(), endTime.Day(), 0, 0, 0, 0, time.UTC)
 
 		s.IsLongShift = isLongShift == 1
 		// Parse SQLite datetime format

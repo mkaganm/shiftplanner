@@ -5,6 +5,9 @@ import './CalendarSection.css';
 export function CalendarSection() {
   const { currentMonth, currentYear, shifts, holidays, previousMonth, nextMonth, formatDate } = useApp();
 
+  // Debug: Log shifts
+  console.log('CalendarSection - shifts:', shifts);
+
   const monthNames = [
     'January', 'February', 'March', 'April', 'May', 'June',
     'July', 'August', 'September', 'October', 'November', 'December'
@@ -33,10 +36,28 @@ export function CalendarSection() {
 
     // Filter shifts for this day
     const dayShifts = shifts.filter((shift) => {
-      if (!shift.start_date || !shift.end_date) return false;
+      if (!shift || !shift.start_date || !shift.end_date) {
+        return false;
+      }
       
-      const startDateStr = shift.start_date.split('T')[0];
-      const endDateStr = shift.end_date.split('T')[0];
+      // Handle both string and Date object formats
+      let startDateStr, endDateStr;
+      
+      if (typeof shift.start_date === 'string') {
+        startDateStr = shift.start_date.split('T')[0];
+      } else if (shift.start_date instanceof Date) {
+        startDateStr = formatDate(shift.start_date);
+      } else {
+        return false;
+      }
+      
+      if (typeof shift.end_date === 'string') {
+        endDateStr = shift.end_date.split('T')[0];
+      } else if (shift.end_date instanceof Date) {
+        endDateStr = formatDate(shift.end_date);
+      } else {
+        return false;
+      }
       
       return dateStr >= startDateStr && dateStr <= endDateStr;
     });

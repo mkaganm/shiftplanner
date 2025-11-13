@@ -9,22 +9,23 @@ import (
 func TestSelectMember(t *testing.T) {
 	// Mock stats for testing
 	stats := map[int]models.MemberStats{
-		1: {TotalDays: 5, LongShiftCount: 2},
-		2: {TotalDays: 3, LongShiftCount: 1},
-		3: {TotalDays: 3, LongShiftCount: 2},
+		1: {TotalDays: 5, LongShiftCount: 2}, // Normal: 3
+		2: {TotalDays: 3, LongShiftCount: 1}, // Normal: 2
+		3: {TotalDays: 3, LongShiftCount: 2}, // Normal: 1
 	}
 
 	memberIDs := []int{1, 2, 3}
 
-	// Member with least total days should be selected (ID: 2 or 3)
-	selectedID := selectMember(memberIDs, stats)
-	if selectedID != 2 && selectedID != 3 {
-		t.Errorf("Wrong member selected: got %d, want 2 or 3", selectedID)
+	// Test long shift selection: should select member with least long shift count
+	selectedID := selectMember(memberIDs, stats, true)
+	if selectedID != 2 {
+		t.Errorf("Wrong member selected for long shift: got %d, want 2 (least long shifts)", selectedID)
 	}
 
-	// In case of equal total days, member with least long shifts should be selected
-	if selectedID != 2 {
-		t.Errorf("Wrong member selected in tie case: got %d, want 2", selectedID)
+	// Test normal shift selection: should select member with least normal shift count
+	selectedID = selectMember(memberIDs, stats, false)
+	if selectedID != 3 {
+		t.Errorf("Wrong member selected for normal shift: got %d, want 3 (least normal shifts: 1)", selectedID)
 	}
 }
 

@@ -1,6 +1,7 @@
 package api
 
 import (
+	"log"
 	"shiftplanner/backend/internal/models"
 	"shiftplanner/backend/internal/scheduler"
 	"shiftplanner/backend/internal/storage"
@@ -155,6 +156,13 @@ func GetShifts(c *fiber.Ctx) error {
 
 	for i := range shifts {
 		shifts[i].MemberName = memberMap[shifts[i].MemberID]
+	}
+
+	// Log shifts for debugging
+	if len(shifts) > 0 {
+		log.Printf("Returning %d shifts", len(shifts))
+	} else {
+		log.Printf("No shifts found for user %d in range %s to %s", userID, startDate.Format("2006-01-02"), endDate.Format("2006-01-02"))
 	}
 
 	return c.JSON(shifts)
