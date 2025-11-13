@@ -1,18 +1,26 @@
 // Authentication - Using API wrapper
 
 // Tab switching
-function showLogin() {
+function showLogin(event) {
     document.getElementById('loginForm').style.display = 'block';
     document.getElementById('registerForm').style.display = 'none';
     document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
-    event.target.classList.add('active');
+    if (event && event.target) {
+        event.target.classList.add('active');
+    } else {
+        document.querySelectorAll('.tab-btn')[0].classList.add('active');
+    }
 }
 
-function showRegister() {
+function showRegister(event) {
     document.getElementById('loginForm').style.display = 'none';
     document.getElementById('registerForm').style.display = 'block';
     document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
-    event.target.classList.add('active');
+    if (event && event.target) {
+        event.target.classList.add('active');
+    } else {
+        document.querySelectorAll('.tab-btn')[1].classList.add('active');
+    }
 }
 
 // Login
@@ -26,10 +34,19 @@ async function login() {
         return;
     }
 
+    // Check if api object is available
+    if (typeof api === 'undefined') {
+        errorDiv.textContent = 'Error: API not loaded. Please refresh the page.';
+        console.error('api object is not defined');
+        return;
+    }
+
     try {
+        errorDiv.textContent = 'Logging in...';
         await api.login(username, password);
         window.location.href = '/index.html';
     } catch (error) {
+        console.error('Login error:', error);
         errorDiv.textContent = error.message || 'Login failed';
     }
 }
@@ -61,10 +78,19 @@ async function register() {
         return;
     }
 
+    // Check if api object is available
+    if (typeof api === 'undefined') {
+        errorDiv.textContent = 'Error: API not loaded. Please refresh the page.';
+        console.error('api object is not defined');
+        return;
+    }
+
     try {
+        errorDiv.textContent = 'Registering...';
         await api.register(username, password);
         window.location.href = '/index.html';
     } catch (error) {
+        console.error('Registration error:', error);
         errorDiv.textContent = error.message || 'Registration failed';
     }
 }

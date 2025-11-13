@@ -2,6 +2,7 @@ package storage
 
 import (
 	"database/sql"
+	"fmt"
 	"shiftplanner/backend/internal/database"
 	"shiftplanner/backend/internal/models"
 	"time"
@@ -83,6 +84,11 @@ func GetMemberByID(userID, memberID int) (*models.Member, error) {
 
 // CreateShift creates a new shift record
 func CreateShift(userID, memberID int, startDate, endDate time.Time, isLongShift bool) (*models.Shift, error) {
+	// Validate dates are not zero
+	if startDate.IsZero() || endDate.IsZero() {
+		return nil, fmt.Errorf("start_date and end_date cannot be zero")
+	}
+
 	startDateStr := startDate.Format("2006-01-02")
 	endDateStr := endDate.Format("2006-01-02")
 
@@ -133,12 +139,31 @@ func GetShiftsByDateRange(userID int, startDate, endDate time.Time) ([]models.Sh
 			return nil, err
 		}
 
+		// Parse start_date - log error if parsing fails
+		if startDateStr == "" {
+			// Skip shifts with empty dates
+			continue
+		}
 		if t, err := time.Parse("2006-01-02", startDateStr); err == nil {
 			s.StartDate = t
+		} else {
+			// Log parse error but continue
+			// This should not happen if data is correct
+			continue
+		}
+
+		// Parse end_date - log error if parsing fails
+		if endDateStr == "" {
+			// Skip shifts with empty dates
+			continue
 		}
 		if t, err := time.Parse("2006-01-02", endDateStr); err == nil {
 			s.EndDate = t
+		} else {
+			// Log parse error but continue
+			continue
 		}
+
 		s.IsLongShift = isLongShift == 1
 		// Parse SQLite datetime format
 		if t, err := time.Parse("2006-01-02 15:04:05", createdAtStr); err == nil {

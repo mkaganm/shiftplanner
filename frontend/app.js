@@ -15,11 +15,11 @@ document.addEventListener('DOMContentLoaded', async () => {
     nextMonth.setMonth(nextMonth.getMonth() + 1);
     document.getElementById('endDate').value = nextMonth.toISOString().split('T')[0];
 
-    // Load initial data
-    await loadAllData();
-
-    // Subscribe to state changes for automatic UI updates
+    // Subscribe to state changes FIRST - so updates trigger renders
     setupReactiveUpdates();
+    
+    // Load initial data - this will trigger subscriptions and render UI
+    await loadAllData();
     
     // Setup auto-refresh every 30 seconds
     setupAutoRefresh();
@@ -36,6 +36,7 @@ async function loadAllData() {
             loadShiftsForCurrentMonth()
         ]);
         // Force calendar update after all data is loaded
+        // Members and stats will be rendered automatically via subscriptions
         updateCalendar();
     } catch (error) {
         if (error.status !== 401) {
@@ -57,13 +58,26 @@ async function loadShiftsForCurrentMonth() {
 function setupReactiveUpdates() {
     // Members list updates automatically
     state.subscribe('members', (members) => {
+        console.log('Members updated:', members.length, 'members');
         renderMembers(members);
     });
 
     // Stats updates automatically
     state.subscribe('stats', (stats) => {
+        console.log('Stats updated:', stats.length, 'stats');
         renderStats(stats);
     });
+    
+    // Initial render if data already exists
+    const existingMembers = state.get('members');
+    if (existingMembers && existingMembers.length > 0) {
+        renderMembers(existingMembers);
+    }
+    
+    const existingStats = state.get('stats');
+    if (existingStats && existingStats.length > 0) {
+        renderStats(existingStats);
+    }
 
     // Calendar updates when shifts or month changes
     state.subscribe('shifts', () => {
