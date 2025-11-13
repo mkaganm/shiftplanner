@@ -19,4 +19,8 @@ Thumbs.db
 
 # Logs
 *.log
+backend.log
+frontend.log
+backend.pid
+frontend.pid
 
