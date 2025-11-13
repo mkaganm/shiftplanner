@@ -195,9 +195,14 @@ function updateCalendar() {
     const shifts = state.get('shifts') || [];
     const holidays = state.get('holidays') || {};
     
-    // Debug: log holidays
+    // Debug: log holidays and shifts
     console.log('Holidays loaded:', holidays);
+    console.log('Shifts loaded:', shifts.length, 'shifts');
     console.log('Current month:', currentMonth + 1, 'Year:', currentYear);
+    
+    if (shifts.length > 0) {
+        console.log('First shift:', shifts[0]);
+    }
     
     const firstDay = new Date(currentYear, currentMonth, 1);
     const lastDay = new Date(currentYear, currentMonth + 1, 0);
@@ -282,6 +287,11 @@ function updateCalendar() {
                 const memberName = shift.member_name || 'Unknown';
                 html += `<span class="shift-name ${shiftClass}">${escapeHtml(memberName)}</span>`;
             });
+        }
+        
+        // Debug: log shifts for first few days
+        if (day <= 5 && dayShifts.length > 0) {
+            console.log(`Day ${day} shifts:`, dayShifts);
         }
         
         html += '</div>';
