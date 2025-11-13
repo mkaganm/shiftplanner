@@ -1,0 +1,92 @@
+/* Members Section Styles */
+.member-form {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 20px;
+}
+
+.member-form input {
+  flex: 1;
+  padding: 12px;
+  border: 1px solid #d0d0d0;
+  border-radius: 4px;
+  font-size: 15px;
+  transition: border-color 0.2s, box-shadow 0.2s;
+  background: #ffffff;
+  color: #2c3e50;
+}
+
+.member-form input:focus {
+  outline: none;
+  border-color: #34495e;
+  box-shadow: 0 0 0 3px rgba(52, 73, 94, 0.1);
+}
+
+.member-form button {
+  padding: 12px 24px;
+  background: #34495e;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  font-size: 15px;
+  cursor: pointer;
+  transition: background 0.2s;
+  font-weight: 500;
+}
+
+.member-form button:hover:not(:disabled) {
+  background: #2c3e50;
+}
+
+.member-form button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.members-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 12px;
+}
+
+.member-item {
+  background: #ffffff;
+  padding: 16px;
+  border-radius: 4px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  transition: box-shadow 0.2s;
+  border: 1px solid #e8e8e8;
+}
+
+.member-item:hover {
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.12);
+}
+
+.member-item span {
+  font-weight: 500;
+  color: #2c3e50;
+}
+
+.delete-btn {
+  background: #95a5a6;
+  padding: 6px 12px;
+  font-size: 13px;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.delete-btn:hover:not(:disabled) {
+  background: #7f8c8d;
+}
+
+.delete-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+

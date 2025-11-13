@@ -1,0 +1,93 @@
+/* Dashboard Styles */
+.container {
+  max-width: 1200px;
+  margin: 0 auto;
+  background: #ffffff;
+  border-radius: 4px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  overflow: hidden;
+  border: 1px solid #e0e0e0;
+}
+
+header {
+  background: #2c3e50;
+  color: #ffffff;
+  padding: 24px 30px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border-bottom: 3px solid #34495e;
+}
+
+header h1 {
+  font-size: 1.8em;
+  font-weight: 600;
+  margin: 0;
+  letter-spacing: -0.5px;
+}
+
+.logout-btn {
+  background: #34495e;
+  color: #ffffff;
+  padding: 10px 20px;
+  border: 1px solid #2c3e50;
+  border-radius: 4px;
+  font-size: 14px;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.logout-btn:hover {
+  background: #1a252f;
+}
+
+.main-content {
+  padding: 30px;
+  background: #fafafa;
+}
+
+.section {
+  margin-bottom: 30px;
+  padding: 24px;
+  background: #ffffff;
+  border-radius: 4px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+  border: 1px solid #e8e8e8;
+}
+
+.section h2 {
+  margin-bottom: 20px;
+  color: #2c3e50;
+  font-size: 1.5em;
+  font-weight: 600;
+  border-bottom: 2px solid #e0e0e0;
+  padding-bottom: 12px;
+}
+
+.empty-state {
+  text-align: center;
+  padding: 40px;
+  color: #95a5a6;
+  font-size: 1em;
+}
+
+.message {
+  padding: 15px;
+  border-radius: 4px;
+  margin-bottom: 20px;
+  font-weight: 500;
+  font-size: 14px;
+}
+
+.message.success {
+  background: #e8f5e9;
+  color: #2e7d32;
+  border: 1px solid #c8e6c9;
+}
+
+.message.error {
+  background: #fee;
+  color: #c33;
+  border: 1px solid #fcc;
+}
+
