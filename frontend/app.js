@@ -28,8 +28,10 @@ document.addEventListener('DOMContentLoaded', () => {
 
     loadMembers();
     loadStats();
-    loadShifts();
-    updateCalendar();
+    // Load holidays first, then shifts (which will also load holidays and update calendar)
+    loadHolidays().then(() => {
+        loadShifts();
+    });
     
     // Set today's date as default
     const today = new Date().toISOString().split('T')[0];
@@ -221,7 +223,8 @@ async function generateShifts() {
         }
         
         const shifts = await response.json();
-        loadShifts();
+        // Reload shifts to update calendar
+        await loadShifts();
         loadStats();
         showMessage(`${shifts.length} shift plans created`, 'success');
     } catch (error) {
@@ -231,6 +234,8 @@ async function generateShifts() {
 
 // Load shifts
 let shifts = [];
+let holidays = {};
+
 async function loadShifts() {
     try {
         const start = new Date(currentYear, currentMonth, 1);
@@ -246,9 +251,27 @@ async function loadShifts() {
         }
         
         shifts = await response.json();
+        
+        // Ensure holidays are loaded
+        if (Object.keys(holidays).length === 0) {
+            await loadHolidays();
+        }
+        
         updateCalendar();
     } catch (error) {
         console.error('Error loading shifts:', error);
+    }
+}
+
+// Load holidays from API
+async function loadHolidays() {
+    try {
+        const response = await fetch(`${API_BASE}/holidays`);
+        if (response.ok) {
+            holidays = await response.json();
+        }
+    } catch (error) {
+        console.error('Error loading holidays:', error);
     }
 }
 
@@ -257,7 +280,9 @@ function updateCalendar() {
     const firstDay = new Date(currentYear, currentMonth, 1);
     const lastDay = new Date(currentYear, currentMonth + 1, 0);
     const daysInMonth = lastDay.getDate();
-    const startingDayOfWeek = firstDay.getDay();
+    // getDay() returns 0=Sunday, 1=Monday, etc. We want Monday=0
+    let startingDayOfWeek = firstDay.getDay() - 1;
+    if (startingDayOfWeek < 0) startingDayOfWeek = 6; // Sunday becomes 6
     
     const monthNames = [
         'January', 'February', 'March', 'April', 'May', 'June',
@@ -279,7 +304,7 @@ function updateCalendar() {
     
     // Empty days (before first day of month)
     for (let i = 0; i < startingDayOfWeek; i++) {
-        html += '<div class="calendar-day"></div>';
+        html += '<div class="day empty"></div>';
     }
     
     // Days of the month
@@ -287,34 +312,45 @@ function updateCalendar() {
         const date = new Date(currentYear, currentMonth, day);
         const dateStr = formatDate(date);
         
+        // Filter shifts for this day - compare date strings directly
         const dayShifts = shifts.filter(s => {
-            const start = new Date(s.start_date);
-            const end = new Date(s.end_date);
-            return date >= start && date <= end;
+            if (!s.start_date || !s.end_date) return false;
+            
+            // Extract date part from ISO string (e.g., "2025-01-01T00:00:00Z" -> "2025-01-01")
+            const startDateStr = String(s.start_date).split('T')[0];
+            const endDateStr = String(s.end_date).split('T')[0];
+            
+            // Check if current date is within shift range
+            return dateStr >= startDateStr && dateStr <= endDateStr;
         });
         
-        let classes = 'calendar-day';
-        if (date.getDay() === 0 || date.getDay() === 6) {
+        let classes = 'day';
+        const dayOfWeek = date.getDay();
+        if (dayOfWeek === 0 || dayOfWeek === 6) {
             classes += ' weekend';
         }
         
-        // Holiday check (simple - should be fetched from API in real app)
-        const isHoliday = checkHoliday(date);
+        // Check if it's a holiday from API
+        const holidayName = holidays[dateStr];
+        const isHoliday = !!holidayName;
         if (isHoliday) {
             classes += ' holiday';
         }
         
-        if (dayShifts.length > 0) {
-            classes += ' has-shift';
+        html += `<div class="${classes}">`;
+        html += `<span class="day-number">${day}</span>`;
+        
+        // Show holiday name if it's a holiday
+        if (isHoliday) {
+            html += `<span class="holiday-name">${escapeHtml(holidayName)}</span>`;
         }
         
-        html += `<div class="${classes}">`;
-        html += `<div class="day-number">${day}</div>`;
-        
+        // Show shifts at the bottom
         if (dayShifts.length > 0) {
             dayShifts.forEach(shift => {
                 const shiftClass = shift.is_long_shift ? 'long-shift' : '';
-                html += `<div class="shift-info ${shiftClass}">${escapeHtml(shift.member_name)}${shift.is_long_shift ? ' (Long)' : ''}</div>`;
+                const memberName = shift.member_name || 'Unknown';
+                html += `<span class="shift-name ${shiftClass}">${escapeHtml(memberName)}</span>`;
             });
         }
         
@@ -346,7 +382,11 @@ function nextMonth() {
 
 // Helper functions
 function formatDate(date) {
-    return date.toISOString().split('T')[0];
+    // Format date as YYYY-MM-DD in local timezone
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
 }
 
 function escapeHtml(text) {
@@ -371,23 +411,3 @@ function showMessage(message, type) {
     setTimeout(() => msg.remove(), 5000);
 }
 
-function checkHoliday(date) {
-    // Simple holiday check - should be fetched from API in real app
-    const month = date.getMonth();
-    const day = date.getDate();
-    
-    // New Year's Day
-    if (month === 0 && day === 1) return true;
-    // April 23
-    if (month === 3 && day === 23) return true;
-    // May 1
-    if (month === 4 && day === 1) return true;
-    // May 19
-    if (month === 4 && day === 19) return true;
-    // August 30
-    if (month === 7 && day === 30) return true;
-    // October 29
-    if (month === 9 && day === 29) return true;
-    
-    return false;
-}
