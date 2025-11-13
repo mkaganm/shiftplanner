@@ -3,6 +3,7 @@ package storage
 import (
 	"database/sql"
 	"fmt"
+	"log"
 	"shiftplanner/backend/internal/database"
 	"shiftplanner/backend/internal/models"
 	"time"
@@ -89,8 +90,12 @@ func CreateShift(userID, memberID int, startDate, endDate time.Time, isLongShift
 		return nil, fmt.Errorf("start_date and end_date cannot be zero")
 	}
 
-	startDateStr := startDate.Format("2006-01-02")
-	endDateStr := endDate.Format("2006-01-02")
+	// Normalize dates to UTC midnight
+	startDateUTC := time.Date(startDate.Year(), startDate.Month(), startDate.Day(), 0, 0, 0, 0, time.UTC)
+	endDateUTC := time.Date(endDate.Year(), endDate.Month(), endDate.Day(), 0, 0, 0, 0, time.UTC)
+
+	startDateStr := startDateUTC.Format("2006-01-02")
+	endDateStr := endDateUTC.Format("2006-01-02")
 
 	result, err := database.DB.Exec(
 		"INSERT INTO shifts (user_id, member_id, start_date, end_date, is_long_shift) VALUES (?, ?, ?, ?, ?)",
@@ -108,10 +113,10 @@ func CreateShift(userID, memberID int, startDate, endDate time.Time, isLongShift
 	return &models.Shift{
 		ID:          int(id),
 		MemberID:    memberID,
-		StartDate:   startDate,
-		EndDate:     endDate,
+		StartDate:   startDateUTC,
+		EndDate:     endDateUTC,
 		IsLongShift: isLongShift,
-		CreatedAt:   time.Now(),
+		CreatedAt:   time.Now().UTC(),
 	}, nil
 }
 
@@ -139,39 +144,40 @@ func GetShiftsByDateRange(userID int, startDate, endDate time.Time) ([]models.Sh
 			return nil, err
 		}
 
-		// Parse start_date - log error if parsing fails
+		// Parse start_date - normalize to UTC midnight
 		if startDateStr == "" {
-			// Skip shifts with empty dates
+			log.Printf("Warning: Shift ID %d has empty start_date, skipping", s.ID)
 			continue
 		}
 		if t, err := time.Parse("2006-01-02", startDateStr); err == nil {
-			s.StartDate = t
+			// Normalize to UTC midnight
+			s.StartDate = time.Date(t.Year(), t.Month(), t.Day(), 0, 0, 0, 0, time.UTC)
 		} else {
-			// Log parse error but continue
-			// This should not happen if data is correct
+			log.Printf("Error parsing start_date '%s' for shift ID %d: %v", startDateStr, s.ID, err)
 			continue
 		}
 
-		// Parse end_date - log error if parsing fails
+		// Parse end_date - normalize to UTC midnight
 		if endDateStr == "" {
-			// Skip shifts with empty dates
+			log.Printf("Warning: Shift ID %d has empty end_date, skipping", s.ID)
 			continue
 		}
 		if t, err := time.Parse("2006-01-02", endDateStr); err == nil {
-			s.EndDate = t
+			// Normalize to UTC midnight
+			s.EndDate = time.Date(t.Year(), t.Month(), t.Day(), 0, 0, 0, 0, time.UTC)
 		} else {
-			// Log parse error but continue
+			log.Printf("Error parsing end_date '%s' for shift ID %d: %v", endDateStr, s.ID, err)
 			continue
 		}
 
 		s.IsLongShift = isLongShift == 1
 		// Parse SQLite datetime format
 		if t, err := time.Parse("2006-01-02 15:04:05", createdAtStr); err == nil {
-			s.CreatedAt = t
+			s.CreatedAt = t.UTC()
 		} else if t, err := time.Parse("2006-01-02T15:04:05Z07:00", createdAtStr); err == nil {
-			s.CreatedAt = t
+			s.CreatedAt = t.UTC()
 		} else {
-			s.CreatedAt = time.Now()
+			s.CreatedAt = time.Now().UTC()
 		}
 
 		shifts = append(shifts, s)
