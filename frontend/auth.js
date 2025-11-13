@@ -1,19 +1,4 @@
-const API_BASE = '/api';
-
-// Get token from localStorage
-function getToken() {
-    return localStorage.getItem('token');
-}
-
-// Save token to localStorage
-function setToken(token) {
-    localStorage.setItem('token', token);
-}
-
-// Remove token
-function removeToken() {
-    localStorage.removeItem('token');
-}
+// Authentication - Using API wrapper
 
 // Tab switching
 function showLogin() {
@@ -42,23 +27,10 @@ async function login() {
     }
 
     try {
-        const response = await fetch(`${API_BASE}/auth/login`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ username, password })
-        });
-
-        if (!response.ok) {
-            const error = await response.text();
-            errorDiv.textContent = error || 'Login failed';
-            return;
-        }
-
-        const data = await response.json();
-        setToken(data.token);
+        await api.login(username, password);
         window.location.href = '/index.html';
     } catch (error) {
-        errorDiv.textContent = 'Error logging in: ' + error.message;
+        errorDiv.textContent = error.message || 'Login failed';
     }
 }
 
@@ -90,22 +62,9 @@ async function register() {
     }
 
     try {
-        const response = await fetch(`${API_BASE}/auth/register`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ username, password })
-        });
-
-        if (!response.ok) {
-            const error = await response.text();
-            errorDiv.textContent = error || 'Registration failed';
-            return;
-        }
-
-        const data = await response.json();
-        setToken(data.token);
+        await api.register(username, password);
         window.location.href = '/index.html';
     } catch (error) {
-        errorDiv.textContent = 'Error registering: ' + error.message;
+        errorDiv.textContent = error.message || 'Registration failed';
     }
 }
