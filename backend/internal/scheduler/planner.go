@@ -2,6 +2,7 @@ package scheduler
 
 import (
 	"encoding/json"
+	"math/rand"
 	"shiftplanner/backend/internal/models"
 	"shiftplanner/backend/internal/storage"
 	"strings"
@@ -55,162 +56,214 @@ func PlanShift(userID int, startDate, endDate time.Time) ([]models.Shift, error)
 		return []models.Shift{}, nil
 	}
 
-	// Get existing statistics
-	stats, err := storage.GetAllMembersStats(userID)
-	if err != nil {
-		return nil, err
-	}
-
 	// Convert member IDs to a slice
 	memberIDs := make([]int, len(members))
 	for i, m := range members {
 		memberIDs[i] = m.ID
 	}
 
-	var shifts []models.Shift
-	currentShiftMemberID := 0
-	currentDate := startDate
+	// İki ayrı map: normal shift gün sayısı ve long shift gün sayısı
+	// Key: memberID, Value: shift gün sayısı
+	normalShiftDays := make(map[int]int) // memberID -> normal shift toplam gün sayısı
+	longShiftDays := make(map[int]int)   // memberID -> long shift toplam gün sayısı
 
-	// If start date is not a working day, go to first working day
-	if !models.IsWorkingDay(currentDate) {
-		currentDate = models.GetNextWorkingDay(currentDate)
-	}
-
-	// Loop through date range
-	for !currentDate.After(endDate) {
-		// Is today a working day?
-		if models.IsWorkingDay(currentDate) {
-			// Will it be a long shift? (is tomorrow a holiday or weekend?)
-			isLongShift := models.WillBeLongShift(currentDate)
-
-			// Select member based on shift type
-			// Long shift: select member with least long shift count
-			// Normal shift: select member with least normal shift count
-			selectedMemberID := selectMember(memberIDs, stats, isLongShift)
-
-			// Calculate shift end date
-			endDateForShift := currentDate
-			if isLongShift {
-				// Continues until next working day
-				nextWorkingDay := models.GetNextWorkingDay(currentDate)
-				// Take previous day (last day of holiday/weekend)
-				endDateForShift = nextWorkingDay.AddDate(0, 0, -1)
-			}
-
-			// End date should not exceed endDate
-			if endDateForShift.After(endDate) {
-				endDateForShift = endDate
-			}
-
-			// Create shift record
-			shift := models.Shift{
-				MemberID:    selectedMemberID,
-				StartDate:   currentDate,
-				EndDate:     endDateForShift,
-				IsLongShift: isLongShift,
-				CreatedAt:   time.Now(),
-			}
-
-			// Update statistics
-			updateStats(&stats, selectedMemberID, shift.StartDate, shift.EndDate, isLongShift)
-
-			shifts = append(shifts, shift)
-			currentShiftMemberID = selectedMemberID
-
-			// Advance date until shift ends
-			currentDate = endDateForShift.AddDate(0, 0, 1)
-		} else {
-			// Holiday or weekend - previous shift person continues
-			// If there's no previous shift person (shouldn't happen as we checked at start), skip to first working day
-			if currentShiftMemberID == 0 {
-				currentDate = models.GetNextWorkingDay(currentDate)
+	// Veritabanındaki tüm shift'leri al ve gerçek gün sayılarını hesapla
+	allShifts, err := storage.GetShiftsByDateRange(userID, time.Date(2000, 1, 1, 0, 0, 0, 0, time.UTC), time.Date(2100, 1, 1, 0, 0, 0, 0, time.UTC))
+	if err == nil {
+		// Her shift için gün sayısını hesapla ve ilgili map'e ekle
+		for _, shift := range allShifts {
+			days := int(shift.EndDate.Sub(shift.StartDate).Hours()/24) + 1
+			if shift.IsLongShift {
+				longShiftDays[shift.MemberID] += days
 			} else {
-				// Previous shift person continues, advance date
-				currentDate = currentDate.AddDate(0, 0, 1)
+				normalShiftDays[shift.MemberID] += days
 			}
 		}
+	}
+
+	// Tüm üyeler için map'leri başlat (shift'i olmayanlar için 0)
+	for _, id := range memberIDs {
+		if _, exists := normalShiftDays[id]; !exists {
+			normalShiftDays[id] = 0
+		}
+		if _, exists := longShiftDays[id]; !exists {
+			longShiftDays[id] = 0
+		}
+	}
+
+	// Mevcut shift'leri al (çakışma kontrolü için)
+	existingShifts, err := storage.GetShiftsByDateRange(userID, startDate, endDate)
+	if err != nil {
+		return nil, err
+	}
+
+	// Çakışan shift'leri sil (üzerine yazmak için)
+	if len(existingShifts) > 0 {
+		if err := storage.DeleteShiftsByDateRange(userID, startDate, endDate); err != nil {
+			return nil, err
+		}
+	}
+
+	// Her gün için bir önceki gün nöbet tutan kişiyi takip et
+	// Key: tarih string (YYYY-MM-DD), Value: memberID
+	prevDayMemberMap := make(map[string]int)
+
+	var shifts []models.Shift
+
+	// Nöbet atamak istediğimiz günleri tek tek gez
+	currentDate := startDate
+	for !currentDate.After(endDate) {
+		// Sadece çalışma günlerini işle
+		if !models.IsWorkingDay(currentDate) {
+			currentDate = currentDate.AddDate(0, 0, 1)
+			continue
+		}
+
+		// Bir önceki çalışma günü nöbet tutan kişiyi bul
+		// Eğer araya hafta sonu veya tatil girerse, son nöbet tutulan çalışma günü baz alınır
+		prevWorkingDay := models.GetPreviousWorkingDay(currentDate)
+		prevDateStr := prevWorkingDay.Format("2006-01-02")
+		prevDayMemberID := prevDayMemberMap[prevDateStr]
+
+		// Bu gün long shift mi?
+		isLongShift := models.WillBeLongShift(currentDate)
+
+		// Uygun kişiyi seç
+		var selectedMemberID int
+		if isLongShift {
+			// Long shift: en az long shift gününe sahip kişiyi seç
+			selectedMemberID = selectMemberByLongShift(memberIDs, longShiftDays, prevDayMemberID)
+		} else {
+			// Normal shift: en az normal shift gününe sahip kişiyi seç
+			selectedMemberID = selectMemberByNormalShift(memberIDs, normalShiftDays, prevDayMemberID)
+		}
+
+		// Shift bitiş tarihini hesapla
+		endDateForShift := currentDate
+		if isLongShift {
+			// Long shift bir sonraki çalışma gününe kadar devam eder
+			nextWorkingDay := models.GetNextWorkingDay(currentDate)
+			endDateForShift = nextWorkingDay.AddDate(0, 0, -1)
+		}
+		if endDateForShift.After(endDate) {
+			endDateForShift = endDate
+		}
+
+		// Yeni shift oluştur
+		shift := models.Shift{
+			MemberID:    selectedMemberID,
+			StartDate:   currentDate,
+			EndDate:     endDateForShift,
+			IsLongShift: isLongShift,
+			CreatedAt:   time.Now(),
+		}
+		shifts = append(shifts, shift)
+
+		// Shift gün sayılarını anında güncelle (bir sonraki gün için)
+		shiftDays := int(endDateForShift.Sub(currentDate).Hours()/24) + 1
+		if isLongShift {
+			longShiftDays[selectedMemberID] += shiftDays
+		} else {
+			normalShiftDays[selectedMemberID] += shiftDays
+		}
+
+		// Bu gün nöbet tutan kişiyi kaydet (bir sonraki gün için)
+		currentDateStr := currentDate.Format("2006-01-02")
+		prevDayMemberMap[currentDateStr] = selectedMemberID
+
+		// Bir sonraki güne geç
+		currentDate = currentDate.AddDate(0, 0, 1)
 	}
 
 	return shifts, nil
 }
 
-// selectMember selects the most suitable member
-// For long shifts: selects member with least long shift count
-// For normal shifts: selects member with least normal shift count (total days - long shift days)
-func selectMember(memberIDs []int, stats map[int]models.MemberStats, isLongShift bool) int {
+// selectMemberByNormalShift en az normal shift gününe sahip kişiyi seçer
+// Önceki gün nöbet tutan kişiyi hariç tutar (arka arkaya nöbet engelleme)
+// Eşitlik durumunda rastgele seçim yapar
+func selectMemberByNormalShift(memberIDs []int, normalShiftDays map[int]int, prevMemberID int) int {
 	if len(memberIDs) == 0 {
 		return 0
 	}
 
-	selectedID := memberIDs[0]
-
-	if isLongShift {
-		// For long shifts: select member with least long shift count
-		minLongShifts := stats[selectedID].LongShiftCount
-
-		for _, id := range memberIDs {
-			memberStats := stats[id]
-			if memberStats.LongShiftCount < minLongShifts {
-				selectedID = id
-				minLongShifts = memberStats.LongShiftCount
-			} else if memberStats.LongShiftCount == minLongShifts {
-				// In case of tie, select member with least total days
-				if memberStats.TotalDays < stats[selectedID].TotalDays {
-					selectedID = id
-				}
-			}
-		}
-	} else {
-		// For normal shifts: select member with least normal shift count
-		// Normal shift count = total days - (long shift count * average long shift days)
-		// For simplicity, we use total days - long shift count as approximation
-		// Better approach: calculate actual normal shift days
-		selectedID = memberIDs[0]
-		minNormalShifts := calculateNormalShiftCount(stats[selectedID])
-
-		for _, id := range memberIDs {
-			memberStats := stats[id]
-			normalShiftCount := calculateNormalShiftCount(memberStats)
-
-			if normalShiftCount < minNormalShifts {
-				selectedID = id
-				minNormalShifts = normalShiftCount
-			} else if normalShiftCount == minNormalShifts {
-				// In case of tie, select member with least total days
-				if memberStats.TotalDays < stats[selectedID].TotalDays {
-					selectedID = id
-				}
-			}
+	// Önceki gün nöbet tutan kişiyi hariç tut
+	availableIDs := make([]int, 0)
+	for _, id := range memberIDs {
+		if id != prevMemberID {
+			availableIDs = append(availableIDs, id)
 		}
 	}
 
-	return selectedID
-}
-
-// calculateNormalShiftCount calculates the number of normal shift days
-// Normal shift days = total days - long shift days
-// We approximate long shift days as long shift count * average days per long shift
-// For simplicity, we use: total days - long shift count
-// This gives us a reasonable approximation for normal shift distribution
-func calculateNormalShiftCount(stats models.MemberStats) int {
-	// Normal shift count approximation: total days - long shift count
-	// This assumes each long shift is roughly 1 day more than normal shift
-	// In reality, we should calculate actual normal shift days from database
-	return stats.TotalDays - stats.LongShiftCount
-}
-
-// updateStats updates statistics
-func updateStats(stats *map[int]models.MemberStats, memberID int, startDate, endDate time.Time, isLongShift bool) {
-	memberStats := (*stats)[memberID]
-
-	// Calculate total days count
-	days := int(endDate.Sub(startDate).Hours()/24) + 1
-	memberStats.TotalDays += days
-
-	// Increment long shift count
-	if isLongShift {
-		memberStats.LongShiftCount++
+	// Eğer tüm kişiler dün nöbet tuttuysa, yine de birini seç
+	if len(availableIDs) == 0 {
+		availableIDs = memberIDs
 	}
 
-	(*stats)[memberID] = memberStats
+	// En az normal shift gününe sahip kişileri bul
+	minNormalDays := normalShiftDays[availableIDs[0]]
+	for _, id := range availableIDs {
+		if normalShiftDays[id] < minNormalDays {
+			minNormalDays = normalShiftDays[id]
+		}
+	}
+
+	// En az değere sahip tüm kişileri topla
+	candidates := make([]int, 0)
+	for _, id := range availableIDs {
+		if normalShiftDays[id] == minNormalDays {
+			candidates = append(candidates, id)
+		}
+	}
+
+	// Rastgele seçim yap
+	if len(candidates) > 0 {
+		return candidates[rand.Intn(len(candidates))]
+	}
+
+	return availableIDs[0]
+}
+
+// selectMemberByLongShift en az long shift gününe sahip kişiyi seçer
+// Önceki gün nöbet tutan kişiyi hariç tutar (arka arkaya nöbet engelleme)
+// Eşitlik durumunda rastgele seçim yapar
+func selectMemberByLongShift(memberIDs []int, longShiftDays map[int]int, prevMemberID int) int {
+	if len(memberIDs) == 0 {
+		return 0
+	}
+
+	// Önceki gün nöbet tutan kişiyi hariç tut
+	availableIDs := make([]int, 0)
+	for _, id := range memberIDs {
+		if id != prevMemberID {
+			availableIDs = append(availableIDs, id)
+		}
+	}
+
+	// Eğer tüm kişiler dün nöbet tuttuysa, yine de birini seç
+	if len(availableIDs) == 0 {
+		availableIDs = memberIDs
+	}
+
+	// En az long shift gününe sahip kişileri bul
+	minLongDays := longShiftDays[availableIDs[0]]
+	for _, id := range availableIDs {
+		if longShiftDays[id] < minLongDays {
+			minLongDays = longShiftDays[id]
+		}
+	}
+
+	// En az değere sahip tüm kişileri topla
+	candidates := make([]int, 0)
+	for _, id := range availableIDs {
+		if longShiftDays[id] == minLongDays {
+			candidates = append(candidates, id)
+		}
+	}
+
+	// Rastgele seçim yap
+	if len(candidates) > 0 {
+		return candidates[rand.Intn(len(candidates))]
+	}
+
+	return availableIDs[0]
 }

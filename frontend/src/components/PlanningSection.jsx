@@ -4,7 +4,7 @@ import { useApp } from '../context/AppContext';
 import './PlanningSection.css';
 
 export function PlanningSection() {
-  const { generateShifts, loading } = useApp();
+  const { generateShifts, clearAllShifts, loading } = useApp();
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
   const [error, setError] = useState('');
@@ -42,6 +42,23 @@ export function PlanningSection() {
     }
   };
 
+  const handleClearAll = async () => {
+    if (!window.confirm('Are you sure you want to delete all shifts? This action cannot be undone.')) {
+      return;
+    }
+
+    setError('');
+    setSuccess('');
+
+    try {
+      await clearAllShifts();
+      setSuccess('All shifts cleared successfully');
+      setTimeout(() => setSuccess(''), 5000);
+    } catch (err) {
+      setError(err.message || 'Error clearing shifts');
+    }
+  };
+
   return (
     <section className="section">
       <h2>Create Shift Plan</h2>
@@ -66,6 +83,16 @@ export function PlanningSection() {
           Create Plan
         </button>
       </form>
+      <div className="clear-section">
+        <button 
+          type="button" 
+          onClick={handleClearAll} 
+          disabled={loading}
+          className="clear-button"
+        >
+          Clear All Shifts
+        </button>
+      </div>
       {error && <div className="error-message">{error}</div>}
       {success && <div className="message success">{success}</div>}
     </section>

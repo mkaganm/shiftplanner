@@ -19,7 +19,7 @@ ifeq ($(OS),Windows_NT)
     BINARY_EXT := .exe
     KILL_BACKEND := powershell -Command "Get-NetTCPConnection -LocalPort $(PORT) -ErrorAction SilentlyContinue | ForEach-Object { Stop-Process -Id $$_.OwningProcess -Force -ErrorAction SilentlyContinue }" 2>nul & taskkill /F /IM go.exe 2>nul || echo Backend stopped
     KILL_FRONTEND := powershell -Command "Get-NetTCPConnection -LocalPort $(FRONTEND_PORT) -ErrorAction SilentlyContinue | ForEach-Object { Stop-Process -Id $$_.OwningProcess -Force -ErrorAction SilentlyContinue }" 2>nul & taskkill /F /IM node.exe 2>nul || echo Frontend stopped
-    CHECK_BACKEND := tasklist /FI "IMAGENAME eq go.exe" 2>nul | find /I "go.exe" >nul
+    CHECK_BACKEND := tasklist /FI "IMAGENAMmakjeE eq go.exe" 2>nul | find /I "go.exe" >nul
     CHECK_FRONTEND := tasklist /FI "IMAGENAME eq node.exe" 2>nul | find /I "node.exe" >nul
 else
     DETECTED_OS := Unix

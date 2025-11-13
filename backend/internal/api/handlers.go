@@ -284,3 +284,21 @@ func GetStats(c *fiber.Ctx) error {
 
 	return c.JSON(response)
 }
+
+// ClearAllShifts deletes all shifts for the authenticated user
+func ClearAllShifts(c *fiber.Ctx) error {
+	userID := GetUserID(c)
+	if userID == 0 {
+		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
+			"error": "Unauthorized",
+		})
+	}
+
+	if err := storage.DeleteAllShifts(userID); err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": err.Error(),
+		})
+	}
+
+	return c.SendStatus(fiber.StatusNoContent)
+}

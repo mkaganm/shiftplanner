@@ -80,6 +80,15 @@ func GetNextWorkingDay(date time.Time) time.Time {
 	return nextDay
 }
 
+// GetPreviousWorkingDay returns the last working day before the specified date
+func GetPreviousWorkingDay(date time.Time) time.Time {
+	prevDay := date.AddDate(0, 0, -1)
+	for !IsWorkingDay(prevDay) {
+		prevDay = prevDay.AddDate(0, 0, -1)
+	}
+	return prevDay
+}
+
 // GetHolidayName returns the public holiday name for the specified date
 func GetHolidayName(date time.Time) string {
 	dateStr := date.Format("2006-01-02")

@@ -133,6 +133,12 @@ export const shiftsAPI = {
       method: 'POST',
       body: JSON.stringify({ start_date: startDate, end_date: endDate })
     });
+  },
+  
+  async clearAll() {
+    return await apiRequest('/shifts', {
+      method: 'DELETE'
+    });
   }
 };
 

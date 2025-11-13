@@ -271,14 +271,26 @@ func GetAllMembersStats(userID int) (map[int]models.MemberStats, error) {
 	return stats, nil
 }
 
-// DeleteShiftsByDateRange deletes shifts in a date range
+// DeleteShiftsByDateRange deletes shifts that overlap with the date range
+// This ensures we don't have duplicate shifts when regenerating
 func DeleteShiftsByDateRange(userID int, startDate, endDate time.Time) error {
 	startDateStr := startDate.Format("2006-01-02")
 	endDateStr := endDate.Format("2006-01-02")
 
+	// Delete shifts that overlap with the date range
+	// A shift overlaps if: start_date <= endDate AND end_date >= startDate
 	_, err := database.DB.Exec(
-		"DELETE FROM shifts WHERE user_id = ? AND start_date >= ? AND start_date <= ?",
-		userID, startDateStr, endDateStr,
+		"DELETE FROM shifts WHERE user_id = ? AND start_date <= ? AND end_date >= ?",
+		userID, endDateStr, startDateStr,
+	)
+	return err
+}
+
+// DeleteAllShifts deletes all shifts for a user
+func DeleteAllShifts(userID int) error {
+	_, err := database.DB.Exec(
+		"DELETE FROM shifts WHERE user_id = ?",
+		userID,
 	)
 	return err
 }

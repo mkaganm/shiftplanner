@@ -99,6 +99,16 @@ export function AppProvider({ children }) {
     }
   };
 
+  const clearAllShifts = async () => {
+    try {
+      await shiftsAPI.clearAll();
+      await loadShiftsForCurrentMonth();
+      await loadStats();
+    } catch (error) {
+      throw error;
+    }
+  };
+
   const loadShiftsForCurrentMonth = async () => {
     const start = new Date(currentYear, currentMonth, 1);
     const end = new Date(currentYear, currentMonth + 1, 0);
@@ -156,6 +166,7 @@ export function AppProvider({ children }) {
     createMember,
     deleteMember,
     generateShifts,
+    clearAllShifts,
     previousMonth,
     nextMonth,
     formatDate
