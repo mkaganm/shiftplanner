@@ -99,25 +99,31 @@ func GetShifts(c *fiber.Ctx) error {
 	var err error
 
 	if startDateStr != "" {
-		startDate, err = time.Parse("2006-01-02", startDateStr)
+		parsedDate, err := time.Parse("2006-01-02", startDateStr)
 		if err != nil {
 			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
 				"error": "Invalid start_date format (use YYYY-MM-DD)",
 			})
 		}
+		// Normalize to UTC midnight
+		startDate = time.Date(parsedDate.Year(), parsedDate.Month(), parsedDate.Day(), 0, 0, 0, 0, time.UTC)
 	} else {
-		startDate = time.Now().AddDate(0, -1, 0) // Last 1 month
+		now := time.Now().UTC()
+		startDate = time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, time.UTC).AddDate(0, -1, 0) // Last 1 month
 	}
 
 	if endDateStr != "" {
-		endDate, err = time.Parse("2006-01-02", endDateStr)
+		parsedDate, err := time.Parse("2006-01-02", endDateStr)
 		if err != nil {
 			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
 				"error": "Invalid end_date format (use YYYY-MM-DD)",
 			})
 		}
+		// Normalize to UTC midnight
+		endDate = time.Date(parsedDate.Year(), parsedDate.Month(), parsedDate.Day(), 0, 0, 0, 0, time.UTC)
 	} else {
-		endDate = time.Now().AddDate(0, 1, 0) // Next 1 month
+		now := time.Now().UTC()
+		endDate = time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, time.UTC).AddDate(0, 1, 0) // Next 1 month
 	}
 
 	userID := GetUserID(c)
