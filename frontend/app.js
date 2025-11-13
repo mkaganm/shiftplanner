@@ -1,7 +1,21 @@
 // Main Application - Reactive UI with State Management
 
+// Check if required objects are available
+if (typeof state === 'undefined') {
+    console.error('state is not defined. Make sure state.js is loaded.');
+}
+if (typeof api === 'undefined') {
+    console.error('api is not defined. Make sure api.js is loaded.');
+}
+
 // Initialize on page load
 document.addEventListener('DOMContentLoaded', async () => {
+    // Check if state and api are available
+    if (typeof state === 'undefined' || typeof api === 'undefined') {
+        alert('Error: Required scripts not loaded. Please refresh the page.');
+        return;
+    }
+    
     // Check authentication
     if (!state.get('token')) {
         window.location.href = '/login.html';
@@ -30,17 +44,30 @@ async function loadAllData() {
     try {
         // Load holidays first, then others
         await api.getHolidays();
-        await Promise.all([
-            api.getMembers(),
-            api.getStats(),
-            loadShiftsForCurrentMonth()
+        
+        const [members, stats] = await Promise.all([
+            api.getMembers().catch(() => []),
+            api.getStats().catch(() => [])
         ]);
+        
+        // Load shifts separately
+        await loadShiftsForCurrentMonth().catch(() => {});
+        
+        // Ensure arrays are not null
+        if (!members || !Array.isArray(members)) {
+            state.set('members', []);
+        }
+        if (!stats || !Array.isArray(stats)) {
+            state.set('stats', []);
+        }
+        
         // Force calendar update after all data is loaded
         // Members and stats will be rendered automatically via subscriptions
         updateCalendar();
     } catch (error) {
+        console.error('Error in loadAllData:', error);
         if (error.status !== 401) {
-            showMessage('Error loading data: ' + error.message, 'error');
+            showMessage('Error loading data: ' + (error.message || 'Unknown error'), 'error');
         }
     }
 }
@@ -51,20 +78,24 @@ async function loadShiftsForCurrentMonth() {
     const currentYear = state.get('currentYear');
     const start = new Date(currentYear, currentMonth, 1);
     const end = new Date(currentYear, currentMonth + 1, 0);
-    await api.getShifts(formatDate(start), formatDate(end));
+    
+    try {
+        await api.getShifts(formatDate(start), formatDate(end));
+    } catch (error) {
+        // Set empty array to prevent null errors
+        state.set('shifts', []);
+    }
 }
 
 // Setup reactive UI updates
 function setupReactiveUpdates() {
     // Members list updates automatically
     state.subscribe('members', (members) => {
-        console.log('Members updated:', members.length, 'members');
         renderMembers(members);
     });
 
     // Stats updates automatically
     state.subscribe('stats', (stats) => {
-        console.log('Stats updated:', stats.length, 'stats');
         renderStats(stats);
     });
     
@@ -99,6 +130,10 @@ function setupReactiveUpdates() {
 
 // Render members list
 function renderMembers(members) {
+    if (!members || !Array.isArray(members)) {
+        return;
+    }
+    
     const list = document.getElementById('membersList');
     if (!list) return;
     
@@ -117,6 +152,10 @@ function renderMembers(members) {
 
 // Render statistics
 function renderStats(stats) {
+    if (!stats || !Array.isArray(stats)) {
+        return;
+    }
+    
     const list = document.getElementById('statsList');
     if (!list) return;
     
@@ -142,7 +181,17 @@ function renderStats(stats) {
 
 // Add member
 async function addMember() {
+    if (typeof api === 'undefined') {
+        alert('Error: API not loaded. Please refresh the page.');
+        return;
+    }
+    
     const nameInput = document.getElementById('memberName');
+    if (!nameInput) {
+        alert('Error: Member name input not found.');
+        return;
+    }
+    
     const name = nameInput.value.trim();
     
     if (!name) {
@@ -157,12 +206,17 @@ async function addMember() {
         // Stats will update automatically via subscription
         await api.getStats();
     } catch (error) {
-        showMessage('Error adding member: ' + error.message, 'error');
+        showMessage('Error adding member: ' + (error.message || 'Unknown error'), 'error');
     }
 }
 
 // Delete member
 async function deleteMember(id) {
+    if (typeof api === 'undefined') {
+        alert('Error: API not loaded. Please refresh the page.');
+        return;
+    }
+    
     if (!confirm('Are you sure you want to delete this member?')) {
         return;
     }
@@ -174,14 +228,27 @@ async function deleteMember(id) {
         await api.getStats();
         await loadShiftsForCurrentMonth();
     } catch (error) {
-        showMessage('Error deleting member: ' + error.message, 'error');
+        showMessage('Error deleting member: ' + (error.message || 'Unknown error'), 'error');
     }
 }
 
 // Generate shift plan
 async function generateShifts() {
-    const startDate = document.getElementById('startDate').value;
-    const endDate = document.getElementById('endDate').value;
+    if (typeof api === 'undefined') {
+        alert('Error: API not loaded. Please refresh the page.');
+        return;
+    }
+    
+    const startDateInput = document.getElementById('startDate');
+    const endDateInput = document.getElementById('endDate');
+    
+    if (!startDateInput || !endDateInput) {
+        alert('Error: Date inputs not found.');
+        return;
+    }
+    
+    const startDate = startDateInput.value;
+    const endDate = endDateInput.value;
     
     if (!startDate || !endDate) {
         showMessage('Please select start and end dates', 'error');
@@ -195,28 +262,36 @@ async function generateShifts() {
     
     try {
         const shifts = await api.generateShifts(startDate, endDate);
+        
+        // Reload shifts for current month to update calendar
+        await loadShiftsForCurrentMonth();
+        
+        // Also reload stats
+        await api.getStats();
+        
         showMessage(`${shifts.length} shift plans created`, 'success');
         // Calendar will update automatically via subscription
     } catch (error) {
-        showMessage('Error creating plan: ' + error.message, 'error');
+        showMessage('Error creating plan: ' + (error.message || 'Unknown error'), 'error');
     }
 }
 
 // Update calendar
 function updateCalendar() {
+    if (typeof state === 'undefined') {
+        return;
+    }
+    
+    const calendar = document.getElementById('calendar');
+    if (!calendar) {
+        return;
+    }
+    
     const currentMonth = state.get('currentMonth');
     const currentYear = state.get('currentYear');
     const shifts = state.get('shifts') || [];
     const holidays = state.get('holidays') || {};
     
-    // Debug: log holidays and shifts
-    console.log('Holidays loaded:', holidays);
-    console.log('Shifts loaded:', shifts.length, 'shifts');
-    console.log('Current month:', currentMonth + 1, 'Year:', currentYear);
-    
-    if (shifts.length > 0) {
-        console.log('First shift:', shifts[0]);
-    }
     
     const firstDay = new Date(currentYear, currentMonth, 1);
     const lastDay = new Date(currentYear, currentMonth + 1, 0);
@@ -256,9 +331,37 @@ function updateCalendar() {
         
         // Filter shifts for this day
         const dayShifts = (shifts || []).filter(s => {
-            if (!s.start_date || !s.end_date) return false;
-            const startDateStr = String(s.start_date).split('T')[0];
-            const endDateStr = String(s.end_date).split('T')[0];
+            if (!s.start_date || !s.end_date) {
+                // Skip shifts with invalid dates
+                return false;
+            }
+            
+            // Handle different date formats
+            let startDateStr, endDateStr;
+            
+            if (typeof s.start_date === 'string') {
+                startDateStr = s.start_date.split('T')[0];
+            } else if (s.start_date instanceof Date) {
+                startDateStr = formatDate(s.start_date);
+            } else {
+                // Try to parse as ISO string
+                startDateStr = String(s.start_date).split('T')[0];
+            }
+            
+            if (typeof s.end_date === 'string') {
+                endDateStr = s.end_date.split('T')[0];
+            } else if (s.end_date instanceof Date) {
+                endDateStr = formatDate(s.end_date);
+            } else {
+                // Try to parse as ISO string
+                endDateStr = String(s.end_date).split('T')[0];
+            }
+            
+            // Skip if dates are invalid (zero dates)
+            if (startDateStr === '0001-01-01' || endDateStr === '0001-01-01') {
+                return false;
+            }
+            
             return dateStr >= startDateStr && dateStr <= endDateStr;
         });
         
@@ -277,10 +380,6 @@ function updateCalendar() {
         }
         const isHoliday = !!holidayName;
         
-        // Debug for first few days
-        if (day <= 5) {
-            console.log(`Day ${day}: dateStr=${dateStr}, holidayName=${holidayName}, isHoliday=${isHoliday}`);
-        }
         if (isHoliday) {
             classes += ' holiday';
         }
@@ -303,11 +402,6 @@ function updateCalendar() {
             });
         }
         
-        // Debug: log shifts for first few days
-        if (day <= 5 && dayShifts.length > 0) {
-            console.log(`Day ${day} shifts:`, dayShifts);
-        }
-        
         html += '</div>';
     }
     
@@ -316,6 +410,11 @@ function updateCalendar() {
 
 // Previous month
 function previousMonth() {
+    if (typeof state === 'undefined') {
+        alert('Error: State not loaded. Please refresh the page.');
+        return;
+    }
+    
     const currentMonth = state.get('currentMonth');
     const currentYear = state.get('currentYear');
     
@@ -335,6 +434,11 @@ function previousMonth() {
 
 // Next month
 function nextMonth() {
+    if (typeof state === 'undefined') {
+        alert('Error: State not loaded. Please refresh the page.');
+        return;
+    }
+    
     const currentMonth = state.get('currentMonth');
     const currentYear = state.get('currentYear');
     
@@ -354,8 +458,19 @@ function nextMonth() {
 
 // Logout
 async function logout() {
-    await api.logout();
-    window.location.href = '/login.html';
+    if (typeof api === 'undefined') {
+        // Even if API is not loaded, redirect to login
+        window.location.href = '/login.html';
+        return;
+    }
+    
+    try {
+        await api.logout();
+    } catch (error) {
+        // Ignore errors on logout
+    } finally {
+        window.location.href = '/login.html';
+    }
 }
 
 // Helper functions

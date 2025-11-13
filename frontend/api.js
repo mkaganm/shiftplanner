@@ -107,8 +107,9 @@ const api = {
     // Members
     async getMembers() {
         const members = await apiRequest('/members');
-        state.set('members', members);
-        return members;
+        const membersArray = Array.isArray(members) ? members : [];
+        state.set('members', membersArray);
+        return membersArray;
     },
     
     async createMember(name) {
@@ -136,8 +137,9 @@ const api = {
             end_date: endDate
         });
         const shifts = await apiRequest(`/shifts?${params}`);
-        state.set('shifts', shifts);
-        return shifts;
+        const shiftsArray = Array.isArray(shifts) ? shifts : [];
+        state.set('shifts', shiftsArray);
+        return shiftsArray;
     },
     
     async generateShifts(startDate, endDate) {
@@ -157,17 +159,17 @@ const api = {
     // Holidays
     async getHolidays() {
         const holidays = await apiRequest('/holidays');
-        console.log('Holidays from API:', holidays);
-        console.log('Holidays type:', typeof holidays);
-        state.set('holidays', holidays);
-        return holidays;
+        const holidaysObj = holidays && typeof holidays === 'object' ? holidays : {};
+        state.set('holidays', holidaysObj);
+        return holidaysObj;
     },
     
     // Stats
     async getStats() {
         const stats = await apiRequest('/stats');
-        state.set('stats', stats);
-        return stats;
+        const statsArray = Array.isArray(stats) ? stats : [];
+        state.set('stats', statsArray);
+        return statsArray;
     }
 };
 
