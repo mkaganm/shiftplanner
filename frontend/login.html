@@ -4,7 +4,20 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Login - Shift Planning System</title>
-    <link rel="stylesheet" href="/style.css">
+    <link rel="stylesheet" href="/style.css?v=8" id="mainStylesheet">
+    <script>
+        // Check if CSS loaded, if not, reload it
+        window.addEventListener('load', function() {
+            const link = document.getElementById('mainStylesheet');
+            if (link && !link.sheet) {
+                console.warn('CSS not loaded, attempting to reload...');
+                const newLink = document.createElement('link');
+                newLink.rel = 'stylesheet';
+                newLink.href = '/style.css?v=' + Date.now();
+                document.head.appendChild(newLink);
+            }
+        });
+    </script>
 </head>
 <body>
     <div class="auth-container">
@@ -51,8 +64,29 @@
         </div>
     </div>
 
-    <script src="/state.js?v=3"></script>
-    <script src="/api.js?v=3"></script>
-    <script src="/auth.js?v=3"></script>
+    <script src="/state.js?v=5"></script>
+    <script src="/api.js?v=5"></script>
+    <script src="/auth.js?v=5"></script>
+    <script>
+        // Verify critical objects are loaded
+        window.addEventListener('load', function() {
+            if (typeof state === 'undefined') {
+                console.error('CRITICAL: state is not defined');
+                const errorDiv = document.getElementById('loginError') || document.getElementById('registerError');
+                if (errorDiv) {
+                    errorDiv.textContent = 'Error: Failed to load required scripts. Please refresh the page.';
+                    errorDiv.style.color = '#ff4444';
+                }
+            }
+            if (typeof api === 'undefined') {
+                console.error('CRITICAL: api is not defined');
+                const errorDiv = document.getElementById('loginError') || document.getElementById('registerError');
+                if (errorDiv) {
+                    errorDiv.textContent = 'Error: Failed to load required scripts. Please refresh the page.';
+                    errorDiv.style.color = '#ff4444';
+                }
+            }
+        });
+    </script>
 </body>
 </html>

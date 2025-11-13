@@ -308,8 +308,7 @@ function updateCalendar() {
     
     document.getElementById('currentMonth').textContent = 
         `${monthNames[currentMonth]} ${currentYear}`;
-    
-    const calendar = document.getElementById('calendar');
+
     const weekDays = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
     
     let html = '';
