@@ -25,7 +25,8 @@ async function apiRequest(endpoint, options = {}) {
   try {
     const response = await fetch(`${API_BASE}${endpoint}`, {
       ...options,
-      headers
+      headers,
+      credentials: 'include' // Include credentials for CORS
     });
     
     // Handle 401 Unauthorized

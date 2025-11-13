@@ -132,10 +132,11 @@ build:
 	@cd $(BACKEND_DIR) && $(GOBUILD) $(LDFLAGS) -o ../$(BUILD_DIR)/$(BINARY_NAME)$(BINARY_EXT) ./cmd/server
 	@echo "Build complete: $(BUILD_DIR)/$(BINARY_NAME)$(BINARY_EXT)"
 
-# Run only the backend server
+# Run only the backend server (API only)
 run:
-	@echo "Starting backend server on port $(PORT)..."
-	@echo "Open http://localhost:$(PORT) in your browser"
+	@echo "Starting backend API server on port $(PORT)..."
+	@echo "API endpoints available at: http://localhost:$(PORT)/api"
+	@echo "Note: Frontend should run separately on port $(FRONTEND_PORT)"
 	@cd $(BACKEND_DIR) && $(GOCMD) run ./cmd/server
 
 # Run only the frontend
