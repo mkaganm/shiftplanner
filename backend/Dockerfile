@@ -11,7 +11,10 @@ RUN go mod download
 COPY . .
 
 # Debug: List directory structure to verify cmd/server exists
-RUN ls -la /app/ && ls -la /app/cmd/ 2>/dev/null || echo "cmd directory check"
+RUN echo "=== Root directory ===" && ls -la /app/ && \
+    echo "=== cmd directory ===" && (ls -la /app/cmd/ || echo "cmd not found") && \
+    echo "=== cmd/server directory ===" && (ls -la /app/cmd/server/ || echo "cmd/server not found") && \
+    echo "=== Finding cmd directories ===" && find /app -type d -name "cmd" 2>/dev/null || echo "No cmd directories found"
 
 # Build the application
 RUN CGO_ENABLED=0 GOOS=linux go build -o server ./cmd/server
