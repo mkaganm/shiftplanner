@@ -4,7 +4,7 @@ import (
 	"time"
 )
 
-// Member takım üyesi modeli
+// Member team member model
 type Member struct {
 	ID        int       `json:"id"`
 	Name      string    `json:"name"`

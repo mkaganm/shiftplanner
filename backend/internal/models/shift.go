@@ -4,7 +4,7 @@ import (
 	"time"
 )
 
-// Shift nöbet modeli
+// Shift shift model
 type Shift struct {
 	ID          int       `json:"id"`
 	MemberID    int       `json:"member_id"`
@@ -15,7 +15,7 @@ type Shift struct {
 	CreatedAt   time.Time `json:"created_at"`
 }
 
-// MemberStats üye istatistikleri
+// MemberStats member statistics
 type MemberStats struct {
 	TotalDays      int `json:"total_days"`
 	LongShiftCount int `json:"long_shift_count"`
