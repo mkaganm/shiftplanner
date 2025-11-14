@@ -139,6 +139,13 @@ export const shiftsAPI = {
     return await apiRequest('/shifts', {
       method: 'DELETE'
     });
+  },
+  
+  async updateForDate(date, memberId) {
+    return await apiRequest('/shifts/date', {
+      method: 'PUT',
+      body: JSON.stringify({ date, member_id: memberId })
+    });
   }
 };
 

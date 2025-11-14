@@ -481,3 +481,63 @@ func DeleteLeaveDay(c *fiber.Ctx) error {
 
 	return c.SendStatus(fiber.StatusNoContent)
 }
+
+// UpdateShiftForDate updates or creates a shift for a specific date
+func UpdateShiftForDate(c *fiber.Ctx) error {
+	userID := GetUserID(c)
+	if userID == 0 {
+		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
+			"error": "Unauthorized",
+		})
+	}
+
+	var req struct {
+		Date     string `json:"date"`
+		MemberID int    `json:"member_id"`
+	}
+
+	if err := c.BodyParser(&req); err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error": err.Error(),
+		})
+	}
+
+	if req.Date == "" {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error": "date is required",
+		})
+	}
+
+	if req.MemberID == 0 {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error": "member_id is required",
+		})
+	}
+
+	// Parse date
+	parsedDate, err := time.Parse("2006-01-02", req.Date)
+	if err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error": "Invalid date format (use YYYY-MM-DD)",
+		})
+	}
+
+	// Normalize to UTC midnight
+	date := time.Date(parsedDate.Year(), parsedDate.Month(), parsedDate.Day(), 0, 0, 0, 0, time.UTC)
+
+	// Create or update shift
+	shift, err := storage.CreateOrUpdateShiftForDate(userID, req.MemberID, date)
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": err.Error(),
+		})
+	}
+
+	// Add member name
+	member, err := storage.GetMemberByID(userID, req.MemberID)
+	if err == nil {
+		shift.MemberName = member.Name
+	}
+
+	return c.JSON(shift)
+}

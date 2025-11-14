@@ -295,6 +295,113 @@ func DeleteAllShifts(userID int) error {
 	return err
 }
 
+// GetShiftByDate gets a shift that covers a specific date
+func GetShiftByDate(userID int, date time.Time) (*models.Shift, error) {
+	dateStr := date.Format("2006-01-02")
+	
+	var s models.Shift
+	var startDateStr, endDateStr, createdAtStr string
+	var isLongShift int
+	
+	err := database.DB.QueryRow(
+		"SELECT id, member_id, start_date, end_date, is_long_shift, created_at FROM shifts WHERE user_id = ? AND start_date <= ? AND end_date >= ? LIMIT 1",
+		userID, dateStr, dateStr,
+	).Scan(&s.ID, &s.MemberID, &startDateStr, &endDateStr, &isLongShift, &createdAtStr)
+	
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return nil, nil // No shift found
+		}
+		return nil, err
+	}
+
+	// Parse start_date
+	var startTime time.Time
+	if t, parseErr := time.Parse("2006-01-02", startDateStr); parseErr == nil {
+		startTime = t
+	} else if t, parseErr := time.Parse(time.RFC3339, startDateStr); parseErr == nil {
+		startTime = t
+	} else if t, parseErr := time.Parse("2006-01-02T15:04:05Z", startDateStr); parseErr == nil {
+		startTime = t
+	} else {
+		return nil, fmt.Errorf("error parsing start_date '%s': %v", startDateStr, parseErr)
+	}
+	s.StartDate = time.Date(startTime.Year(), startTime.Month(), startTime.Day(), 0, 0, 0, 0, time.UTC)
+
+	// Parse end_date
+	var endTime time.Time
+	if t, parseErr := time.Parse("2006-01-02", endDateStr); parseErr == nil {
+		endTime = t
+	} else if t, parseErr := time.Parse(time.RFC3339, endDateStr); parseErr == nil {
+		endTime = t
+	} else if t, parseErr := time.Parse("2006-01-02T15:04:05Z", endDateStr); parseErr == nil {
+		endTime = t
+	} else {
+		return nil, fmt.Errorf("error parsing end_date '%s': %v", endDateStr, parseErr)
+	}
+	s.EndDate = time.Date(endTime.Year(), endTime.Month(), endTime.Day(), 0, 0, 0, 0, time.UTC)
+
+	s.IsLongShift = isLongShift == 1
+	
+	// Parse created_at
+	if t, err := time.Parse("2006-01-02 15:04:05", createdAtStr); err == nil {
+		s.CreatedAt = t.UTC()
+	} else if t, err := time.Parse("2006-01-02T15:04:05Z07:00", createdAtStr); err == nil {
+		s.CreatedAt = t.UTC()
+	} else {
+		s.CreatedAt = time.Now().UTC()
+	}
+
+	return &s, nil
+}
+
+// UpdateShiftMember updates the member for a shift
+func UpdateShiftMember(userID, shiftID, newMemberID int) error {
+	_, err := database.DB.Exec(
+		"UPDATE shifts SET member_id = ? WHERE id = ? AND user_id = ?",
+		newMemberID, shiftID, userID,
+	)
+	return err
+}
+
+// CreateOrUpdateShiftForDate creates or updates a shift for a specific date
+// If a shift exists for that date, updates the member_id
+// If no shift exists, creates a new single-day shift
+func CreateOrUpdateShiftForDate(userID, memberID int, date time.Time) (*models.Shift, error) {
+	// Normalize date to UTC midnight
+	dateUTC := time.Date(date.Year(), date.Month(), date.Day(), 0, 0, 0, 0, time.UTC)
+
+	// Check if shift exists for this date
+	existingShift, err := GetShiftByDate(userID, dateUTC)
+	if err != nil {
+		return nil, err
+	}
+
+	if existingShift != nil {
+		// Update existing shift member
+		if err := UpdateShiftMember(userID, existingShift.ID, memberID); err != nil {
+			return nil, err
+		}
+		
+		// Fetch updated shift
+		updatedShift, err := GetShiftByDate(userID, dateUTC)
+		if err != nil {
+			return nil, err
+		}
+		return updatedShift, nil
+	}
+
+	// Create new single-day shift
+	// Check if it should be a long shift
+	isLongShift := false
+	nextDay := dateUTC.AddDate(0, 0, 1)
+	if models.IsHoliday(nextDay) || models.IsWeekend(nextDay) {
+		isLongShift = true
+	}
+
+	return CreateShift(userID, memberID, dateUTC, dateUTC, isLongShift)
+}
+
 // CreateLeaveDay creates a new leave day record
 func CreateLeaveDay(userID, memberID int, leaveDate time.Time) (*models.LeaveDay, error) {
 	// Validate date is not zero

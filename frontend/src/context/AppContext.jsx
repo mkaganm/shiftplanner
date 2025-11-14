@@ -110,6 +110,16 @@ export function AppProvider({ children }) {
     }
   };
 
+  const updateShiftForDate = async (date, memberId) => {
+    try {
+      await shiftsAPI.updateForDate(date, memberId);
+      await loadShiftsForCurrentMonth();
+      await loadStats();
+    } catch (error) {
+      throw error;
+    }
+  };
+
   const loadLeaveDays = async (memberId, startDate, endDate) => {
     try {
       setLoading(true);
@@ -211,6 +221,7 @@ export function AppProvider({ children }) {
     clearAllShifts,
     createLeaveDay,
     deleteLeaveDay,
+    updateShiftForDate,
     previousMonth,
     nextMonth,
     formatDate
