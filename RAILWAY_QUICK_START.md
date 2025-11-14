@@ -10,8 +10,14 @@
 
 1. **New Project** → **Deploy from GitHub repo**
 2. Repository'nizi seçin
-3. **Settings** → **Root Directory** → `backend` yazın ve kaydedin
-4. **Variables** sekmesinde şu environment variables'ları ekleyin:
+3. **ÖNEMLİ:** Service oluşturulduktan sonra:
+   - Service'e tıklayın
+   - **Settings** sekmesine gidin
+   - **Root Directory** alanını bulun
+   - `backend` yazın (sadece `backend`, başka bir şey değil)
+   - **Save** butonuna tıklayın
+   - Service otomatik olarak yeniden deploy olacak
+4. Deploy tamamlandıktan sonra **Variables** sekmesinde şu environment variables'ları ekleyin:
    ```
    PORT=8080
    DATA_DIR=/tmp
@@ -24,8 +30,14 @@
 
 1. Aynı project içinde **New Service** → **Deploy from GitHub repo**
 2. Aynı repository'yi seçin
-3. **Settings** → **Root Directory** → `frontend` yazın ve kaydedin
-4. **Variables** sekmesinde şu environment variable'ı ekleyin:
+3. **ÖNEMLİ:** Service oluşturulduktan sonra:
+   - Service'e tıklayın
+   - **Settings** sekmesine gidin
+   - **Root Directory** alanını bulun
+   - `frontend` yazın (sadece `frontend`, başka bir şey değil)
+   - **Save** butonuna tıklayın
+   - Service otomatik olarak yeniden deploy olacak
+4. Deploy tamamlandıktan sonra **Variables** sekmesinde şu environment variable'ı ekleyin:
    ```
    VITE_API_URL=https://your-backend-url.railway.app
    ```
