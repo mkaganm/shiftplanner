@@ -1,8 +1,12 @@
+# Docker Compose - Works with both local and AWS
+# Local: docker compose up -d --build
+# AWS: docker compose up -d --build (same command!)
+
 services:
   backend:
     build:
-      context: ./backend
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: ./backend/Dockerfile
     container_name: shiftplanner-backend
     restart: unless-stopped
     ports:
@@ -24,8 +28,8 @@ services:
 
   frontend:
     build:
-      context: ./frontend
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: ./frontend/Dockerfile
       args:
         - VITE_API_URL=
     container_name: shiftplanner-frontend
@@ -49,4 +53,3 @@ volumes:
 networks:
   shiftplanner-network:
     driver: bridge
-
