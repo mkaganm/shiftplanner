@@ -3,20 +3,24 @@ FROM golang:1.23-alpine AS builder
 
 WORKDIR /app
 
+# Debug: List what's available in build context
+RUN echo "=== Build context check ===" && ls -la / || echo "Cannot list root"
+
 # Copy go mod files (build context is root, so use backend/go.mod)
 COPY backend/go.mod backend/go.sum ./
 RUN go mod download
 
-# Copy backend source code - explicitly copy each directory
-COPY backend/cmd ./cmd
-COPY backend/internal ./internal
+# Copy backend source code - try different approaches
+# First, copy everything from backend
+COPY backend/ ./
 
-# Debug: Verify directory structure BEFORE build
-RUN echo "=== Root directory ===" && ls -la /app/ && \
-    echo "=== cmd directory ===" && ls -la /app/cmd/ && \
-    echo "=== cmd/server directory ===" && ls -la /app/cmd/server/ && \
-    echo "=== cmd/server/main.go ===" && ls -la /app/cmd/server/main.go && \
-    echo "=== Finding all .go files in cmd ===" && find /app/cmd -name "*.go" 2>/dev/null || echo "No .go files found"
+# Debug: Verify what was copied
+RUN echo "=== After COPY backend/ ===" && \
+    ls -la /app/ && \
+    echo "=== cmd directory ===" && \
+    (ls -la /app/cmd/ || echo "cmd not found") && \
+    echo "=== Finding cmd ===" && \
+    find /app -type d -name "cmd" 2>/dev/null || echo "No cmd found"
 
 # Build the application
 RUN CGO_ENABLED=0 GOOS=linux go build -o server ./cmd/server
