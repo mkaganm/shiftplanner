@@ -18,19 +18,31 @@ RUN echo "=== Root directory contents ===" && \
     (test -d /app/backend/cmd && echo "backend/cmd directory EXISTS" || echo "backend/cmd directory NOT FOUND") && \
     echo "=== Finding all cmd directories ===" && \
     find /app -type d -name "cmd" 2>/dev/null && \
-    echo "=== Listing cmd/server if exists ===" && \
-    (ls -la /app/cmd/server/ 2>/dev/null || ls -la /app/backend/cmd/server/ 2>/dev/null || echo "cmd/server not found in either location")
+    echo "=== Finding all main.go files ===" && \
+    find /app -type f -name "main.go" 2>/dev/null && \
+    echo "=== Listing all directories in /app ===" && \
+    find /app -type d -maxdepth 3 2>/dev/null | head -20
 
 # Determine the correct path for cmd/server
+# Try multiple possible locations
 RUN if [ -d /app/cmd/server ]; then \
         echo "Building from /app/cmd/server" && \
         CGO_ENABLED=0 GOOS=linux go build -o server ./cmd/server; \
     elif [ -d /app/backend/cmd/server ]; then \
         echo "Building from /app/backend/cmd/server" && \
-        CGO_ENABLED=0 GOOS=linux go build -o server ./backend/cmd/server; \
+        cd /app/backend && CGO_ENABLED=0 GOOS=linux go build -o /app/server ./cmd/server; \
+    elif [ -f /app/cmd/server/main.go ]; then \
+        echo "Building from /app/cmd/server/main.go" && \
+        CGO_ENABLED=0 GOOS=linux go build -o server ./cmd/server; \
+    elif [ -f /app/backend/cmd/server/main.go ]; then \
+        echo "Building from /app/backend/cmd/server/main.go" && \
+        cd /app/backend && CGO_ENABLED=0 GOOS=linux go build -o /app/server ./cmd/server; \
     else \
         echo "ERROR: cmd/server not found!" && \
-        find /app -type f -name "main.go" && \
+        echo "=== Full directory tree ===" && \
+        find /app -type d 2>/dev/null | head -30 && \
+        echo "=== All .go files ===" && \
+        find /app -type f -name "*.go" 2>/dev/null | head -20 && \
         exit 1; \
     fi
 
