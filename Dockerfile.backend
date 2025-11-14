@@ -1,17 +1,14 @@
-# Backend Dockerfile
+# Backend Dockerfile for AWS (root context)
 FROM golang:1.23-alpine AS builder
 
 WORKDIR /app
 
 # Copy go mod files first (for better caching)
-COPY go.mod go.sum ./
+COPY backend/go.mod backend/go.sum ./
 RUN go mod download
 
-# Copy source code
-COPY . .
-
-# Debug: List directory structure to verify cmd/server exists
-RUN ls -la /app/ && ls -la /app/cmd/ 2>/dev/null || echo "cmd directory check"
+# Copy backend source code
+COPY backend/ ./
 
 # Build the application
 RUN CGO_ENABLED=0 GOOS=linux go build -o server ./cmd/server
@@ -38,3 +35,4 @@ ENV DATA_DIR=/data
 
 # Run the server
 CMD ["./server"]
+
