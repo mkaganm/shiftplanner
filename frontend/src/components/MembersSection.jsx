@@ -42,13 +42,11 @@ export function MembersSection() {
   };
 
   useEffect(() => {
-    loadLeaveDays();
+    // Leave days are loaded automatically when month changes in AppContext
   }, []);
-
 
   const openLeaveModal = (memberId) => {
     setShowLeaveModal(memberId);
-    loadLeaveDays(memberId);
     setLeaveStartDate('');
     setLeaveEndDate('');
     setLeaveError('');
@@ -87,7 +85,7 @@ export function MembersSection() {
       await createLeaveDay(memberId, leaveStartDate, leaveEndDate);
       setLeaveStartDate('');
       setLeaveEndDate('');
-      await loadLeaveDays(memberId);
+      // Leave days are automatically reloaded in createLeaveDay
     } catch (err) {
       setLeaveError(err.message || 'Error adding leave days');
     }
@@ -100,7 +98,7 @@ export function MembersSection() {
 
     try {
       await deleteLeaveDay(leaveDayId);
-      await loadLeaveDays(memberId);
+      // Leave days are automatically reloaded in deleteLeaveDay
     } catch (err) {
       alert(err.message || 'Error deleting leave day');
     }
