@@ -13,16 +13,15 @@ import (
 	"testing"
 	"time"
 
+	"github.com/gofiber/fiber/v2"
 	_ "modernc.org/sqlite"
 )
 
 func setupTestAPI(t *testing.T) int {
-	// Test database setup
 	return setupTestDB(t)
 }
 
 func setupTestDB(t *testing.T) int {
-	// Create temporary database for testing
 	testDBPath := "test_api.db"
 	os.Remove(testDBPath)
 
@@ -32,7 +31,6 @@ func setupTestDB(t *testing.T) int {
 		t.Fatalf("Failed to create test database: %v", err)
 	}
 
-	// Create schema
 	createUsersTable := `
 	CREATE TABLE IF NOT EXISTS users (
 		id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -86,7 +84,6 @@ func setupTestDB(t *testing.T) int {
 		t.Fatalf("Failed to create sessions table: %v", err)
 	}
 
-	// Create test user
 	result, _ := database.DB.Exec("INSERT INTO users (username, password_hash) VALUES (?, ?)", "testuser", "testhash")
 	userID, _ := result.LastInsertId()
 	return int(userID)
@@ -101,16 +98,15 @@ func teardownTestAPI(t *testing.T) {
 }
 
 func TestGetShifts_NoDatabase(t *testing.T) {
-	// Test without database connection
 	database.DB = nil
 
+	app := fiber.New()
+	app.Get("/api/shifts", GetShifts)
+
 	req := httptest.NewRequest(http.MethodGet, "/api/shifts?start_date=2025-01-06&end_date=2025-01-06", nil)
-	w := httptest.NewRecorder()
+	resp, _ := app.Test(req)
 
-	GetShifts(w, req)
-
-	// Should fail without database connection
-	if w.Code == http.StatusOK {
+	if resp.StatusCode == http.StatusOK {
 		t.Error("Should not succeed without database connection")
 	}
 }
@@ -119,31 +115,28 @@ func TestGetMembers(t *testing.T) {
 	userID := setupTestDB(t)
 	defer teardownTestAPI(t)
 
-	// Add test data
 	storage.CreateMember(userID, "Test Member 1")
 	storage.CreateMember(userID, "Test Member 2")
 
-	// Create token (for simple test)
 	token := "test_token_123"
 	database.DB.Exec("INSERT INTO sessions (user_id, token, expires_at) VALUES (?, ?, datetime('now', '+7 days'))", userID, token)
 
+	app := fiber.New()
+	app.Get("/api/members", AuthMiddleware, GetMembers)
+
 	req := httptest.NewRequest(http.MethodGet, "/api/members", nil)
 	req.Header.Set("Authorization", token)
-	w := httptest.NewRecorder()
+	resp, _ := app.Test(req)
 
-	GetMembers(w, req)
-
-	if w.Code != http.StatusOK {
-		t.Errorf("Expected status code: %d, got %d", http.StatusOK, w.Code)
+	if resp.StatusCode != http.StatusOK {
+		t.Errorf("Expected status code: %d, got %d", http.StatusOK, resp.StatusCode)
 	}
 
 	var members []struct {
 		ID   int    `json:"id"`
 		Name string `json:"name"`
 	}
-	if err := json.NewDecoder(w.Body).Decode(&members); err != nil {
-		t.Fatalf("Failed to decode response: %v", err)
-	}
+	json.NewDecoder(resp.Body).Decode(&members)
 
 	if len(members) < 2 {
 		t.Errorf("Expected member count: at least 2, got %d", len(members))
@@ -154,29 +147,27 @@ func TestCreateMember(t *testing.T) {
 	userID := setupTestDB(t)
 	defer teardownTestAPI(t)
 
-	// Create token
 	token := "test_token_123"
 	database.DB.Exec("INSERT INTO sessions (user_id, token, expires_at) VALUES (?, ?, datetime('now', '+7 days'))", userID, token)
+
+	app := fiber.New()
+	app.Post("/api/members", AuthMiddleware, CreateMember)
 
 	body := bytes.NewBufferString(`{"name":"New Member"}`)
 	req := httptest.NewRequest(http.MethodPost, "/api/members", body)
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", token)
-	w := httptest.NewRecorder()
+	resp, _ := app.Test(req)
 
-	CreateMember(w, req)
-
-	if w.Code != http.StatusCreated {
-		t.Errorf("Expected status code: %d, got %d", http.StatusCreated, w.Code)
+	if resp.StatusCode != http.StatusCreated {
+		t.Errorf("Expected status code: %d, got %d", http.StatusCreated, resp.StatusCode)
 	}
 
 	var member struct {
 		ID   int    `json:"id"`
 		Name string `json:"name"`
 	}
-	if err := json.NewDecoder(w.Body).Decode(&member); err != nil {
-		t.Fatalf("Failed to decode response: %v", err)
-	}
+	json.NewDecoder(resp.Body).Decode(&member)
 
 	if member.Name != "New Member" {
 		t.Errorf("Member name mismatch: got %s, want New Member", member.Name)
@@ -187,20 +178,20 @@ func TestCreateMember_EmptyName(t *testing.T) {
 	userID := setupTestDB(t)
 	defer teardownTestAPI(t)
 
-	// Create token
 	token := "test_token_123"
 	database.DB.Exec("INSERT INTO sessions (user_id, token, expires_at) VALUES (?, ?, datetime('now', '+7 days'))", userID, token)
+
+	app := fiber.New()
+	app.Post("/api/members", AuthMiddleware, CreateMember)
 
 	body := bytes.NewBufferString(`{"name":""}`)
 	req := httptest.NewRequest(http.MethodPost, "/api/members", body)
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", token)
-	w := httptest.NewRecorder()
+	resp, _ := app.Test(req)
 
-	CreateMember(w, req)
-
-	if w.Code != http.StatusBadRequest {
-		t.Errorf("Expected status code: %d, got %d", http.StatusBadRequest, w.Code)
+	if resp.StatusCode != http.StatusBadRequest {
+		t.Errorf("Expected status code: %d, got %d", http.StatusBadRequest, resp.StatusCode)
 	}
 }
 
@@ -208,7 +199,6 @@ func TestGetShifts(t *testing.T) {
 	userID := setupTestDB(t)
 	defer teardownTestAPI(t)
 
-	// Create token
 	token := "test_token_123"
 	database.DB.Exec("INSERT INTO sessions (user_id, token, expires_at) VALUES (?, ?, datetime('now', '+7 days'))", userID, token)
 
@@ -224,14 +214,15 @@ func TestGetShifts(t *testing.T) {
 		t.Fatalf("Failed to create shift: %v", err)
 	}
 
+	app := fiber.New()
+	app.Get("/api/shifts", AuthMiddleware, GetShifts)
+
 	req := httptest.NewRequest(http.MethodGet, "/api/shifts?start_date=2025-01-06&end_date=2025-01-06", nil)
 	req.Header.Set("Authorization", token)
-	w := httptest.NewRecorder()
+	resp, _ := app.Test(req)
 
-	GetShifts(w, req)
-
-	if w.Code != http.StatusOK {
-		t.Errorf("Expected status code: %d, got %d", http.StatusOK, w.Code)
+	if resp.StatusCode != http.StatusOK {
+		t.Errorf("Expected status code: %d, got %d", http.StatusOK, resp.StatusCode)
 	}
 }
 
@@ -239,21 +230,21 @@ func TestGetStats(t *testing.T) {
 	userID := setupTestDB(t)
 	defer teardownTestAPI(t)
 
-	// Create token
 	token := "test_token_123"
 	database.DB.Exec("INSERT INTO sessions (user_id, token, expires_at) VALUES (?, ?, datetime('now', '+7 days'))", userID, token)
 
 	storage.CreateMember(userID, "Test Member 1")
 	storage.CreateMember(userID, "Test Member 2")
 
+	app := fiber.New()
+	app.Get("/api/stats", AuthMiddleware, GetStats)
+
 	req := httptest.NewRequest(http.MethodGet, "/api/stats", nil)
 	req.Header.Set("Authorization", token)
-	w := httptest.NewRecorder()
+	resp, _ := app.Test(req)
 
-	GetStats(w, req)
-
-	if w.Code != http.StatusOK {
-		t.Errorf("Expected status code: %d, got %d", http.StatusOK, w.Code)
+	if resp.StatusCode != http.StatusOK {
+		t.Errorf("Expected status code: %d, got %d", http.StatusOK, resp.StatusCode)
 	}
 }
 
@@ -261,20 +252,20 @@ func TestDeleteMember(t *testing.T) {
 	userID := setupTestDB(t)
 	defer teardownTestAPI(t)
 
-	// Create token
 	token := "test_token_123"
 	database.DB.Exec("INSERT INTO sessions (user_id, token, expires_at) VALUES (?, ?, datetime('now', '+7 days'))", userID, token)
 
 	member, _ := storage.CreateMember(userID, "Member to Delete")
 
+	app := fiber.New()
+	app.Delete("/api/members/:id", AuthMiddleware, DeleteMember)
+
 	req := httptest.NewRequest(http.MethodDelete, "/api/members/"+strconv.Itoa(member.ID), nil)
 	req.Header.Set("Authorization", token)
-	w := httptest.NewRecorder()
+	resp, _ := app.Test(req)
 
-	DeleteMember(w, req)
-
-	if w.Code != http.StatusNoContent {
-		t.Errorf("Expected status code: %d, got %d", http.StatusNoContent, w.Code)
+	if resp.StatusCode != http.StatusNoContent {
+		t.Errorf("Expected status code: %d, got %d", http.StatusNoContent, resp.StatusCode)
 	}
 }
 
@@ -282,18 +273,18 @@ func TestDeleteMember_InvalidID(t *testing.T) {
 	userID := setupTestDB(t)
 	defer teardownTestAPI(t)
 
-	// Create token
 	token := "test_token_123"
 	database.DB.Exec("INSERT INTO sessions (user_id, token, expires_at) VALUES (?, ?, datetime('now', '+7 days'))", userID, token)
 
+	app := fiber.New()
+	app.Delete("/api/members/:id", AuthMiddleware, DeleteMember)
+
 	req := httptest.NewRequest(http.MethodDelete, "/api/members/invalid", nil)
 	req.Header.Set("Authorization", token)
-	w := httptest.NewRecorder()
+	resp, _ := app.Test(req)
 
-	DeleteMember(w, req)
-
-	if w.Code != http.StatusBadRequest {
-		t.Errorf("Expected status code: %d, got %d", http.StatusBadRequest, w.Code)
+	if resp.StatusCode != http.StatusBadRequest {
+		t.Errorf("Expected status code: %d, got %d", http.StatusBadRequest, resp.StatusCode)
 	}
 }
 
@@ -301,44 +292,42 @@ func TestGenerateShifts(t *testing.T) {
 	userID := setupTestDB(t)
 	defer teardownTestAPI(t)
 
-	// Create token
 	token := "test_token_123"
 	database.DB.Exec("INSERT INTO sessions (user_id, token, expires_at) VALUES (?, ?, datetime('now', '+7 days'))", userID, token)
 
-	// Create members
 	storage.CreateMember(userID, "Member 1")
 	storage.CreateMember(userID, "Member 2")
+
+	app := fiber.New()
+	app.Post("/api/shifts/generate", AuthMiddleware, GenerateShifts)
 
 	body := bytes.NewBufferString(`{"start_date":"2025-01-06","end_date":"2025-01-10"}`)
 	req := httptest.NewRequest(http.MethodPost, "/api/shifts/generate", body)
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", token)
-	w := httptest.NewRecorder()
+	resp, _ := app.Test(req)
 
-	GenerateShifts(w, req)
-
-	if w.Code != http.StatusCreated {
-		t.Errorf("Expected status code: %d, got %d", http.StatusCreated, w.Code)
+	if resp.StatusCode != http.StatusCreated {
+		t.Errorf("Expected status code: %d, got %d", http.StatusCreated, resp.StatusCode)
 	}
 }
 
 func TestGetHolidays(t *testing.T) {
+	app := fiber.New()
+	app.Get("/api/holidays", GetHolidays)
+
 	req := httptest.NewRequest(http.MethodGet, "/api/holidays", nil)
-	w := httptest.NewRecorder()
+	resp, _ := app.Test(req)
 
-	GetHolidays(w, req)
-
-	if w.Code != http.StatusOK {
-		t.Errorf("Expected status code: %d, got %d", http.StatusOK, w.Code)
+	if resp.StatusCode != http.StatusOK {
+		t.Errorf("Expected status code: %d, got %d", http.StatusOK, resp.StatusCode)
 	}
 
 	var holidays []struct {
 		Date string `json:"date"`
 		Name string `json:"name"`
 	}
-	if err := json.NewDecoder(w.Body).Decode(&holidays); err != nil {
-		t.Fatalf("Failed to decode response: %v", err)
-	}
+	json.NewDecoder(resp.Body).Decode(&holidays)
 
 	if len(holidays) == 0 {
 		t.Error("Holiday list should not be empty")
@@ -349,21 +338,20 @@ func TestRegister(t *testing.T) {
 	setupTestDB(t)
 	defer teardownTestAPI(t)
 
+	app := fiber.New()
+	app.Post("/api/auth/register", Register)
+
 	body := bytes.NewBufferString(`{"username":"newuser","password":"password123"}`)
 	req := httptest.NewRequest(http.MethodPost, "/api/auth/register", body)
 	req.Header.Set("Content-Type", "application/json")
-	w := httptest.NewRecorder()
+	resp, _ := app.Test(req)
 
-	Register(w, req)
-
-	if w.Code != http.StatusCreated {
-		t.Errorf("Expected status code: %d, got %d", http.StatusCreated, w.Code)
+	if resp.StatusCode != http.StatusCreated {
+		t.Errorf("Expected status code: %d, got %d", http.StatusCreated, resp.StatusCode)
 	}
 
 	var response map[string]interface{}
-	if err := json.NewDecoder(w.Body).Decode(&response); err != nil {
-		t.Fatalf("Failed to decode response: %v", err)
-	}
+	json.NewDecoder(resp.Body).Decode(&response)
 
 	if response["token"] == nil {
 		t.Error("Token should be returned")
@@ -371,69 +359,64 @@ func TestRegister(t *testing.T) {
 }
 
 func TestRegister_DuplicateUsername(t *testing.T) {
-	userID := setupTestDB(t)
+	setupTestDB(t)
 	defer teardownTestAPI(t)
 
-	// Create user
 	database.DB.Exec("INSERT INTO users (username, password_hash) VALUES (?, ?)", "existinguser", "hash")
+
+	app := fiber.New()
+	app.Post("/api/auth/register", Register)
 
 	body := bytes.NewBufferString(`{"username":"existinguser","password":"password123"}`)
 	req := httptest.NewRequest(http.MethodPost, "/api/auth/register", body)
 	req.Header.Set("Content-Type", "application/json")
-	w := httptest.NewRecorder()
+	resp, _ := app.Test(req)
 
-	Register(w, req)
-
-	if w.Code != http.StatusConflict {
-		t.Errorf("Expected status code: %d, got %d", http.StatusConflict, w.Code)
+	if resp.StatusCode != http.StatusConflict {
+		t.Errorf("Expected status code: %d, got %d", http.StatusConflict, resp.StatusCode)
 	}
-
-	_ = userID
 }
 
 func TestLogin(t *testing.T) {
-	userID := setupTestDB(t)
+	setupTestDB(t)
 	defer teardownTestAPI(t)
 
-	// Create user (using storage)
 	storage.CreateUser("testuser", "password123")
+
+	app := fiber.New()
+	app.Post("/api/auth/login", Login)
 
 	body := bytes.NewBufferString(`{"username":"testuser","password":"password123"}`)
 	req := httptest.NewRequest(http.MethodPost, "/api/auth/login", body)
 	req.Header.Set("Content-Type", "application/json")
-	w := httptest.NewRecorder()
+	resp, _ := app.Test(req)
 
-	Login(w, req)
-
-	if w.Code != http.StatusOK {
-		t.Errorf("Expected status code: %d, got %d", http.StatusOK, w.Code)
+	if resp.StatusCode != http.StatusOK {
+		t.Errorf("Expected status code: %d, got %d", http.StatusOK, resp.StatusCode)
 	}
 
 	var response map[string]interface{}
-	if err := json.NewDecoder(w.Body).Decode(&response); err != nil {
-		t.Fatalf("Failed to decode response: %v", err)
-	}
+	json.NewDecoder(resp.Body).Decode(&response)
 
 	if response["token"] == nil {
 		t.Error("Token should be returned")
 	}
-
-	_ = userID
 }
 
 func TestLogin_InvalidCredentials(t *testing.T) {
 	setupTestDB(t)
 	defer teardownTestAPI(t)
 
+	app := fiber.New()
+	app.Post("/api/auth/login", Login)
+
 	body := bytes.NewBufferString(`{"username":"nonexistent","password":"wrong"}`)
 	req := httptest.NewRequest(http.MethodPost, "/api/auth/login", body)
 	req.Header.Set("Content-Type", "application/json")
-	w := httptest.NewRecorder()
+	resp, _ := app.Test(req)
 
-	Login(w, req)
-
-	if w.Code != http.StatusUnauthorized {
-		t.Errorf("Expected status code: %d, got %d", http.StatusUnauthorized, w.Code)
+	if resp.StatusCode != http.StatusUnauthorized {
+		t.Errorf("Expected status code: %d, got %d", http.StatusUnauthorized, resp.StatusCode)
 	}
 }
 
@@ -441,17 +424,17 @@ func TestLogout(t *testing.T) {
 	userID := setupTestDB(t)
 	defer teardownTestAPI(t)
 
-	// Create token
 	token := "test_token_123"
 	database.DB.Exec("INSERT INTO sessions (user_id, token, expires_at) VALUES (?, ?, datetime('now', '+7 days'))", userID, token)
 
+	app := fiber.New()
+	app.Post("/api/auth/logout", AuthMiddleware, Logout)
+
 	req := httptest.NewRequest(http.MethodPost, "/api/auth/logout", nil)
 	req.Header.Set("Authorization", token)
-	w := httptest.NewRecorder()
+	resp, _ := app.Test(req)
 
-	Logout(w, req)
-
-	if w.Code != http.StatusOK {
-		t.Errorf("Expected status code: %d, got %d", http.StatusOK, w.Code)
+	if resp.StatusCode != http.StatusOK {
+		t.Errorf("Expected status code: %d, got %d", http.StatusOK, resp.StatusCode)
 	}
 }

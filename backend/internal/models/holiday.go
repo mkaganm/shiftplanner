@@ -7,50 +7,50 @@ import (
 // Turkey's public holidays (2025-2026)
 var holidays = map[string]string{
 	// 2025 - Official Holidays
-	"2025-01-01": "Yılbaşı",
-	"2025-04-23": "Ulusal Egemenlik ve Çocuk Bayramı",
-	"2025-05-01": "Emek ve Dayanışma Günü",
-	"2025-05-19": "Atatürk'ü Anma, Gençlik ve Spor Bayramı",
-	"2025-07-15": "Demokrasi ve Millî Birlik Günü",
-	"2025-08-30": "Zafer Bayramı",
-	"2025-10-29": "Cumhuriyet Bayramı",
-	"2025-12-31": "Yılbaşı Gecesi",
+	"2025-01-01": "New Year's Day",
+	"2025-04-23": "National Sovereignty and Children's Day",
+	"2025-05-01": "Labor and Solidarity Day",
+	"2025-05-19": "Commemoration of Atatürk, Youth and Sports Day",
+	"2025-07-15": "Democracy and National Unity Day",
+	"2025-08-30": "Victory Day",
+	"2025-10-29": "Republic Day",
+	"2025-12-31": "New Year's Eve",
 
-	// 2025 - Religious Holidays (Ramazan Bayramı)
-	"2025-03-29": "Ramazan Bayramı Arife",
-	"2025-03-30": "Ramazan Bayramı",
-	"2025-03-31": "Ramazan Bayramı",
-	"2025-04-01": "Ramazan Bayramı",
+	// 2025 - Religious Holidays (Eid al-Fitr)
+	"2025-03-29": "Eid al-Fitr Eve",
+	"2025-03-30": "Eid al-Fitr",
+	"2025-03-31": "Eid al-Fitr",
+	"2025-04-01": "Eid al-Fitr",
 
-	// 2025 - Religious Holidays (Kurban Bayramı)
-	"2025-06-05": "Kurban Bayramı Arife",
-	"2025-06-06": "Kurban Bayramı",
-	"2025-06-07": "Kurban Bayramı",
-	"2025-06-08": "Kurban Bayramı",
-	"2025-06-09": "Kurban Bayramı",
+	// 2025 - Religious Holidays (Eid al-Adha)
+	"2025-06-05": "Eid al-Adha Eve",
+	"2025-06-06": "Eid al-Adha",
+	"2025-06-07": "Eid al-Adha",
+	"2025-06-08": "Eid al-Adha",
+	"2025-06-09": "Eid al-Adha",
 
 	// 2026 - Official Holidays
-	"2026-01-01": "Yılbaşı",
-	"2026-04-23": "Ulusal Egemenlik ve Çocuk Bayramı",
-	"2026-05-01": "Emek ve Dayanışma Günü",
-	"2026-05-19": "Atatürk'ü Anma, Gençlik ve Spor Bayramı",
-	"2026-07-15": "Demokrasi ve Millî Birlik Günü",
-	"2026-08-30": "Zafer Bayramı",
-	"2026-10-29": "Cumhuriyet Bayramı",
-	"2026-12-31": "Yılbaşı Gecesi",
+	"2026-01-01": "New Year's Day",
+	"2026-04-23": "National Sovereignty and Children's Day",
+	"2026-05-01": "Labor and Solidarity Day",
+	"2026-05-19": "Commemoration of Atatürk, Youth and Sports Day",
+	"2026-07-15": "Democracy and National Unity Day",
+	"2026-08-30": "Victory Day",
+	"2026-10-29": "Republic Day",
+	"2026-12-31": "New Year's Eve",
 
-	// 2026 - Religious Holidays (Ramazan Bayramı)
-	"2026-03-18": "Ramazan Bayramı Arife",
-	"2026-03-19": "Ramazan Bayramı",
-	"2026-03-20": "Ramazan Bayramı",
-	"2026-03-21": "Ramazan Bayramı",
+	// 2026 - Religious Holidays (Eid al-Fitr)
+	"2026-03-18": "Eid al-Fitr Eve",
+	"2026-03-19": "Eid al-Fitr",
+	"2026-03-20": "Eid al-Fitr",
+	"2026-03-21": "Eid al-Fitr",
 
-	// 2026 - Religious Holidays (Kurban Bayramı)
-	"2026-05-25": "Kurban Bayramı Arife",
-	"2026-05-26": "Kurban Bayramı",
-	"2026-05-27": "Kurban Bayramı",
-	"2026-05-28": "Kurban Bayramı",
-	"2026-05-29": "Kurban Bayramı",
+	// 2026 - Religious Holidays (Eid al-Adha)
+	"2026-05-25": "Eid al-Adha Eve",
+	"2026-05-26": "Eid al-Adha",
+	"2026-05-27": "Eid al-Adha",
+	"2026-05-28": "Eid al-Adha",
+	"2026-05-29": "Eid al-Adha",
 }
 
 // IsHoliday checks if the specified date is a public holiday

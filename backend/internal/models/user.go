@@ -4,14 +4,14 @@ import (
 	"time"
 )
 
-// User kullanıcı modeli
+// User represents a user model
 type User struct {
 	ID        int       `json:"id"`
 	Username  string    `json:"username"`
 	CreatedAt time.Time `json:"created_at"`
 }
 
-// Session oturum modeli
+// Session represents a session model
 type Session struct {
 	ID        int       `json:"id"`
 	UserID    int       `json:"user_id"`
