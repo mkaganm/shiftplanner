@@ -7,44 +7,23 @@ WORKDIR /app
 COPY backend/go.mod backend/go.sum ./
 RUN go mod download
 
-# Copy backend source code - copy entire backend directory
-COPY backend/ ./
+# Copy backend source code - explicitly copy cmd directory first
+# cmd directory might be ignored, so copy it explicitly
+COPY backend/cmd ./cmd
+COPY backend/internal ./internal
 
-# Debug: Verify what was copied (this will show in build output)
+# Debug: Verify what was copied
 RUN echo "=== Root directory contents ===" && \
     ls -la /app/ && \
-    echo "=== Checking for cmd ===" && \
-    (test -d /app/cmd && echo "cmd directory EXISTS" || echo "cmd directory NOT FOUND") && \
-    (test -d /app/backend/cmd && echo "backend/cmd directory EXISTS" || echo "backend/cmd directory NOT FOUND") && \
-    echo "=== Finding all cmd directories ===" && \
-    find /app -type d -name "cmd" 2>/dev/null && \
-    echo "=== Finding all main.go files ===" && \
-    find /app -type f -name "main.go" 2>/dev/null && \
-    echo "=== Listing all directories in /app ===" && \
-    find /app -type d -maxdepth 3 2>/dev/null | head -20
+    echo "=== cmd directory ===" && \
+    ls -la /app/cmd/ && \
+    echo "=== cmd/server directory ===" && \
+    ls -la /app/cmd/server/ && \
+    echo "=== main.go file ===" && \
+    ls -la /app/cmd/server/main.go
 
-# Determine the correct path for cmd/server
-# Try multiple possible locations
-RUN if [ -d /app/cmd/server ]; then \
-        echo "Building from /app/cmd/server" && \
-        CGO_ENABLED=0 GOOS=linux go build -o server ./cmd/server; \
-    elif [ -d /app/backend/cmd/server ]; then \
-        echo "Building from /app/backend/cmd/server" && \
-        cd /app/backend && CGO_ENABLED=0 GOOS=linux go build -o /app/server ./cmd/server; \
-    elif [ -f /app/cmd/server/main.go ]; then \
-        echo "Building from /app/cmd/server/main.go" && \
-        CGO_ENABLED=0 GOOS=linux go build -o server ./cmd/server; \
-    elif [ -f /app/backend/cmd/server/main.go ]; then \
-        echo "Building from /app/backend/cmd/server/main.go" && \
-        cd /app/backend && CGO_ENABLED=0 GOOS=linux go build -o /app/server ./cmd/server; \
-    else \
-        echo "ERROR: cmd/server not found!" && \
-        echo "=== Full directory tree ===" && \
-        find /app -type d 2>/dev/null | head -30 && \
-        echo "=== All .go files ===" && \
-        find /app -type f -name "*.go" 2>/dev/null | head -20 && \
-        exit 1; \
-    fi
+# Build the application
+RUN CGO_ENABLED=0 GOOS=linux go build -o server ./cmd/server
 
 # Final stage
 FROM alpine:latest
