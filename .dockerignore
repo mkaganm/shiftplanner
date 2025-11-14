@@ -1,0 +1,35 @@
+# Git
+.git
+.gitignore
+
+# Documentation
+*.md
+README.md
+RAILWAY_*.md
+DEPLOYMENT_*.md
+BEST_*.md
+ORACLE_*.md
+RENDER_*.md
+
+# IDE
+.vscode
+.idea
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Build artifacts
+dist
+build
+node_modules
+*.log
+
+# Environment
+.env
+.env.local
+.env.*.local
+
