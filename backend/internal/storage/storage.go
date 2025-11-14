@@ -294,3 +294,250 @@ func DeleteAllShifts(userID int) error {
 	)
 	return err
 }
+
+// CreateLeaveDay creates a new leave day record
+func CreateLeaveDay(userID, memberID int, leaveDate time.Time) (*models.LeaveDay, error) {
+	// Validate date is not zero
+	if leaveDate.IsZero() {
+		return nil, fmt.Errorf("leave_date cannot be zero")
+	}
+
+	// Normalize date to UTC midnight
+	leaveDateUTC := time.Date(leaveDate.Year(), leaveDate.Month(), leaveDate.Day(), 0, 0, 0, 0, time.UTC)
+	leaveDateStr := leaveDateUTC.Format("2006-01-02")
+
+	result, err := database.DB.Exec(
+		"INSERT INTO leave_days (user_id, member_id, leave_date) VALUES (?, ?, ?)",
+		userID, memberID, leaveDateStr,
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	id, err := result.LastInsertId()
+	if err != nil {
+		return nil, err
+	}
+
+	return &models.LeaveDay{
+		ID:        int(id),
+		MemberID:  memberID,
+		LeaveDate: leaveDateUTC,
+		CreatedAt: time.Now().UTC(),
+	}, nil
+}
+
+// CreateLeaveDaysRange creates leave days for a date range
+func CreateLeaveDaysRange(userID, memberID int, startDate, endDate time.Time) ([]models.LeaveDay, error) {
+	if startDate.IsZero() || endDate.IsZero() {
+		return nil, fmt.Errorf("start_date and end_date cannot be zero")
+	}
+
+	if startDate.After(endDate) {
+		return nil, fmt.Errorf("start_date must be before or equal to end_date")
+	}
+
+	var leaveDays []models.LeaveDay
+	currentDate := startDate
+
+	// Iterate through each day in the range
+	for !currentDate.After(endDate) {
+		// Normalize to UTC midnight
+		dateUTC := time.Date(currentDate.Year(), currentDate.Month(), currentDate.Day(), 0, 0, 0, 0, time.UTC)
+		dateStr := dateUTC.Format("2006-01-02")
+
+		// Check if leave day already exists
+		var existingID int
+		err := database.DB.QueryRow(
+			"SELECT id FROM leave_days WHERE user_id = ? AND member_id = ? AND leave_date = ?",
+			userID, memberID, dateStr,
+		).Scan(&existingID)
+
+		if err == nil {
+			// Already exists, fetch it
+			var existingLeaveDay models.LeaveDay
+			var createdAtStr string
+			err := database.DB.QueryRow(
+				"SELECT id, member_id, leave_date, created_at FROM leave_days WHERE id = ?",
+				existingID,
+			).Scan(&existingLeaveDay.ID, &existingLeaveDay.MemberID, &dateStr, &createdAtStr)
+			if err == nil {
+				// Parse the date
+				if t, parseErr := time.Parse("2006-01-02", dateStr); parseErr == nil {
+					existingLeaveDay.LeaveDate = time.Date(t.Year(), t.Month(), t.Day(), 0, 0, 0, 0, time.UTC)
+				}
+				// Parse created_at
+				if t, err := time.Parse("2006-01-02 15:04:05", createdAtStr); err == nil {
+					existingLeaveDay.CreatedAt = t.UTC()
+				} else if t, err := time.Parse("2006-01-02T15:04:05Z07:00", createdAtStr); err == nil {
+					existingLeaveDay.CreatedAt = t.UTC()
+				} else {
+					existingLeaveDay.CreatedAt = time.Now().UTC()
+				}
+				leaveDays = append(leaveDays, existingLeaveDay)
+			}
+		} else {
+			// Doesn't exist, insert it
+			result, err := database.DB.Exec(
+				"INSERT INTO leave_days (user_id, member_id, leave_date) VALUES (?, ?, ?)",
+				userID, memberID, dateStr,
+			)
+			if err != nil {
+				return nil, err
+			}
+
+			id, err := result.LastInsertId()
+			if err == nil {
+				leaveDays = append(leaveDays, models.LeaveDay{
+					ID:        int(id),
+					MemberID:  memberID,
+					LeaveDate: dateUTC,
+					CreatedAt: time.Now().UTC(),
+				})
+			}
+		}
+
+		// Move to next day
+		currentDate = currentDate.AddDate(0, 0, 1)
+	}
+
+	return leaveDays, nil
+}
+
+// GetLeaveDaysByDateRange gets leave days for members in a date range
+func GetLeaveDaysByDateRange(userID int, startDate, endDate time.Time) ([]models.LeaveDay, error) {
+	startDateStr := startDate.Format("2006-01-02")
+	endDateStr := endDate.Format("2006-01-02")
+
+	rows, err := database.DB.Query(
+		"SELECT id, member_id, leave_date, created_at FROM leave_days WHERE user_id = ? AND leave_date >= ? AND leave_date <= ? ORDER BY leave_date",
+		userID, startDateStr, endDateStr,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var leaveDays []models.LeaveDay
+	for rows.Next() {
+		var ld models.LeaveDay
+		var leaveDateStr, createdAtStr string
+
+		if err := rows.Scan(&ld.ID, &ld.MemberID, &leaveDateStr, &createdAtStr); err != nil {
+			return nil, err
+		}
+
+		// Parse leave_date - normalize to UTC midnight
+		if leaveDateStr == "" {
+			log.Printf("Warning: Leave day ID %d has empty leave_date, skipping", ld.ID)
+			continue
+		}
+
+		var leaveTime time.Time
+		if t, parseErr := time.Parse("2006-01-02", leaveDateStr); parseErr == nil {
+			leaveTime = t
+		} else if t, parseErr := time.Parse(time.RFC3339, leaveDateStr); parseErr == nil {
+			leaveTime = t
+		} else if t, parseErr := time.Parse("2006-01-02T15:04:05Z", leaveDateStr); parseErr == nil {
+			leaveTime = t
+		} else {
+			log.Printf("Error parsing leave_date '%s' for leave day ID %d: %v", leaveDateStr, ld.ID, parseErr)
+			continue
+		}
+
+		// Normalize to UTC midnight
+		ld.LeaveDate = time.Date(leaveTime.Year(), leaveTime.Month(), leaveTime.Day(), 0, 0, 0, 0, time.UTC)
+
+		// Parse created_at
+		if t, err := time.Parse("2006-01-02 15:04:05", createdAtStr); err == nil {
+			ld.CreatedAt = t.UTC()
+		} else if t, err := time.Parse("2006-01-02T15:04:05Z07:00", createdAtStr); err == nil {
+			ld.CreatedAt = t.UTC()
+		} else {
+			ld.CreatedAt = time.Now().UTC()
+		}
+
+		leaveDays = append(leaveDays, ld)
+	}
+
+	return leaveDays, rows.Err()
+}
+
+// GetLeaveDaysByMember gets all leave days for a specific member
+func GetLeaveDaysByMember(userID, memberID int) ([]models.LeaveDay, error) {
+	rows, err := database.DB.Query(
+		"SELECT id, member_id, leave_date, created_at FROM leave_days WHERE user_id = ? AND member_id = ? ORDER BY leave_date",
+		userID, memberID,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var leaveDays []models.LeaveDay
+	for rows.Next() {
+		var ld models.LeaveDay
+		var leaveDateStr, createdAtStr string
+
+		if err := rows.Scan(&ld.ID, &ld.MemberID, &leaveDateStr, &createdAtStr); err != nil {
+			return nil, err
+		}
+
+		// Parse leave_date - normalize to UTC midnight
+		if leaveDateStr == "" {
+			log.Printf("Warning: Leave day ID %d has empty leave_date, skipping", ld.ID)
+			continue
+		}
+
+		var leaveTime time.Time
+		if t, parseErr := time.Parse("2006-01-02", leaveDateStr); parseErr == nil {
+			leaveTime = t
+		} else if t, parseErr := time.Parse(time.RFC3339, leaveDateStr); parseErr == nil {
+			leaveTime = t
+		} else if t, parseErr := time.Parse("2006-01-02T15:04:05Z", leaveDateStr); parseErr == nil {
+			leaveTime = t
+		} else {
+			log.Printf("Error parsing leave_date '%s' for leave day ID %d: %v", leaveDateStr, ld.ID, parseErr)
+			continue
+		}
+
+		// Normalize to UTC midnight
+		ld.LeaveDate = time.Date(leaveTime.Year(), leaveTime.Month(), leaveTime.Day(), 0, 0, 0, 0, time.UTC)
+
+		// Parse created_at
+		if t, err := time.Parse("2006-01-02 15:04:05", createdAtStr); err == nil {
+			ld.CreatedAt = t.UTC()
+		} else if t, err := time.Parse("2006-01-02T15:04:05Z07:00", createdAtStr); err == nil {
+			ld.CreatedAt = t.UTC()
+		} else {
+			ld.CreatedAt = time.Now().UTC()
+		}
+
+		leaveDays = append(leaveDays, ld)
+	}
+
+	return leaveDays, rows.Err()
+}
+
+// IsMemberOnLeave checks if a member is on leave on a specific date
+func IsMemberOnLeave(userID, memberID int, date time.Time) (bool, error) {
+	dateStr := date.Format("2006-01-02")
+	var count int
+	err := database.DB.QueryRow(
+		"SELECT COUNT(*) FROM leave_days WHERE user_id = ? AND member_id = ? AND leave_date = ?",
+		userID, memberID, dateStr,
+	).Scan(&count)
+	if err != nil {
+		return false, err
+	}
+	return count > 0, nil
+}
+
+// DeleteLeaveDay deletes a leave day record
+func DeleteLeaveDay(userID, leaveDayID int) error {
+	_, err := database.DB.Exec(
+		"DELETE FROM leave_days WHERE id = ? AND user_id = ?",
+		leaveDayID, userID,
+	)
+	return err
+}

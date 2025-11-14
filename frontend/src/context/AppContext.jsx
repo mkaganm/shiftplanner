@@ -1,6 +1,6 @@
 // Application State Context
 import { createContext, useContext, useState, useEffect } from 'react';
-import { membersAPI, shiftsAPI, holidaysAPI, statsAPI } from '../services/api';
+import { membersAPI, shiftsAPI, holidaysAPI, statsAPI, leaveDaysAPI } from '../services/api';
 
 const AppContext = createContext(null);
 
@@ -9,6 +9,7 @@ export function AppProvider({ children }) {
   const [shifts, setShifts] = useState([]);
   const [holidays, setHolidays] = useState({});
   const [stats, setStats] = useState([]);
+  const [leaveDays, setLeaveDays] = useState([]);
   const [currentMonth, setCurrentMonth] = useState(new Date().getMonth());
   const [currentYear, setCurrentYear] = useState(new Date().getFullYear());
   const [loading, setLoading] = useState(false);
@@ -109,6 +110,39 @@ export function AppProvider({ children }) {
     }
   };
 
+  const loadLeaveDays = async (memberId, startDate, endDate) => {
+    try {
+      setLoading(true);
+      const data = await leaveDaysAPI.getAll(memberId, startDate, endDate);
+      setLeaveDays(Array.isArray(data) ? data : []);
+    } catch (error) {
+      console.error('Error loading leave days:', error);
+      setLeaveDays([]);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const createLeaveDay = async (memberId, startDate, endDate) => {
+    try {
+      await leaveDaysAPI.create(memberId, startDate, endDate);
+      // Reload all leave days
+      await loadLeaveDays();
+    } catch (error) {
+      throw error;
+    }
+  };
+
+  const deleteLeaveDay = async (id) => {
+    try {
+      await leaveDaysAPI.delete(id);
+      // Reload all leave days
+      await loadLeaveDays();
+    } catch (error) {
+      throw error;
+    }
+  };
+
   const loadShiftsForCurrentMonth = async () => {
     const start = new Date(currentYear, currentMonth, 1);
     const end = new Date(currentYear, currentMonth + 1, 0);
@@ -146,9 +180,15 @@ export function AppProvider({ children }) {
     setCurrentYear(newYear);
   };
 
-  // Load shifts when month changes
+  // Load shifts and leave days when month changes
   useEffect(() => {
     loadShiftsForCurrentMonth();
+    // Load leave days for current month
+    const start = new Date(currentYear, currentMonth, 1);
+    const end = new Date(currentYear, currentMonth + 1, 0);
+    const startDate = formatDate(start);
+    const endDate = formatDate(end);
+    loadLeaveDays(null, startDate, endDate);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentMonth, currentYear]);
 
@@ -157,16 +197,20 @@ export function AppProvider({ children }) {
     shifts,
     holidays,
     stats,
+    leaveDays,
     currentMonth,
     currentYear,
     loading,
     loadMembers,
     loadShifts,
     loadStats,
+    loadLeaveDays,
     createMember,
     deleteMember,
     generateShifts,
     clearAllShifts,
+    createLeaveDay,
+    deleteLeaveDay,
     previousMonth,
     nextMonth,
     formatDate

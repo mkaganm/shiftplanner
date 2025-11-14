@@ -139,6 +139,23 @@
   border-color: #7f8c8d;
 }
 
+.leave-name {
+  font-size: 11px;
+  color: #2c3e50;
+  background: #fff3cd;
+  padding: 5px 6px;
+  border-radius: 3px;
+  font-weight: 500;
+  margin-top: 2px;
+  display: block;
+  text-align: center;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  border: 1px solid #ffc107;
+  border-left: 3px solid #ff9800;
+}
+
 /* Responsive */
 @media (max-width: 768px) {
   .calendar {

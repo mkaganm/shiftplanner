@@ -156,3 +156,28 @@ export const statsAPI = {
   }
 };
 
+// Leave Days API
+export const leaveDaysAPI = {
+  async getAll(memberId, startDate, endDate) {
+    const params = new URLSearchParams();
+    if (memberId) params.append('member_id', memberId);
+    if (startDate) params.append('start_date', startDate);
+    if (endDate) params.append('end_date', endDate);
+    const queryString = params.toString();
+    return await apiRequest(`/leave-days${queryString ? `?${queryString}` : ''}`);
+  },
+  
+  async create(memberId, startDate, endDate) {
+    return await apiRequest('/leave-days', {
+      method: 'POST',
+      body: JSON.stringify({ member_id: memberId, start_date: startDate, end_date: endDate })
+    });
+  },
+  
+  async delete(id) {
+    return await apiRequest(`/leave-days/${id}`, {
+      method: 'DELETE'
+    });
+  }
+};
+

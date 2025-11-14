@@ -302,3 +302,182 @@ func ClearAllShifts(c *fiber.Ctx) error {
 
 	return c.SendStatus(fiber.StatusNoContent)
 }
+
+// CreateLeaveDay creates leave days for a date range
+func CreateLeaveDay(c *fiber.Ctx) error {
+	userID := GetUserID(c)
+	if userID == 0 {
+		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
+			"error": "Unauthorized",
+		})
+	}
+
+	var req struct {
+		MemberID  int    `json:"member_id"`
+		StartDate string `json:"start_date"`
+		EndDate   string `json:"end_date"`
+	}
+
+	if err := c.BodyParser(&req); err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error": err.Error(),
+		})
+	}
+
+	if req.MemberID == 0 {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error": "member_id is required",
+		})
+	}
+
+	if req.StartDate == "" {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error": "start_date is required",
+		})
+	}
+
+	if req.EndDate == "" {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error": "end_date is required",
+		})
+	}
+
+	// Parse dates
+	parsedStartDate, err := time.Parse("2006-01-02", req.StartDate)
+	if err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error": "Invalid start_date format (use YYYY-MM-DD)",
+		})
+	}
+
+	parsedEndDate, err := time.Parse("2006-01-02", req.EndDate)
+	if err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error": "Invalid end_date format (use YYYY-MM-DD)",
+		})
+	}
+
+	// Normalize to UTC midnight
+	startDate := time.Date(parsedStartDate.Year(), parsedStartDate.Month(), parsedStartDate.Day(), 0, 0, 0, 0, time.UTC)
+	endDate := time.Date(parsedEndDate.Year(), parsedEndDate.Month(), parsedEndDate.Day(), 0, 0, 0, 0, time.UTC)
+
+	if startDate.After(endDate) {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error": "start_date must be before or equal to end_date",
+		})
+	}
+
+	leaveDays, err := storage.CreateLeaveDaysRange(userID, req.MemberID, startDate, endDate)
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": err.Error(),
+		})
+	}
+
+	// Add member name
+	member, err := storage.GetMemberByID(userID, req.MemberID)
+	if err == nil {
+		for i := range leaveDays {
+			leaveDays[i].MemberName = member.Name
+		}
+	}
+
+	return c.Status(fiber.StatusCreated).JSON(leaveDays)
+}
+
+// GetLeaveDays returns leave days
+func GetLeaveDays(c *fiber.Ctx) error {
+	userID := GetUserID(c)
+	if userID == 0 {
+		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
+			"error": "Unauthorized",
+		})
+	}
+
+	memberIDStr := c.Query("member_id")
+	startDateStr := c.Query("start_date")
+	endDateStr := c.Query("end_date")
+
+	var leaveDays []models.LeaveDay
+	var err error
+
+	if memberIDStr != "" {
+		// Get leave days for specific member
+		memberID, err := strconv.Atoi(memberIDStr)
+		if err != nil {
+			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+				"error": "Invalid member_id",
+			})
+		}
+		leaveDays, err = storage.GetLeaveDaysByMember(userID, memberID)
+	} else if startDateStr != "" && endDateStr != "" {
+		// Get leave days for date range
+		startDate, err := time.Parse("2006-01-02", startDateStr)
+		if err != nil {
+			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+				"error": "Invalid start_date format (use YYYY-MM-DD)",
+			})
+		}
+		endDate, err := time.Parse("2006-01-02", endDateStr)
+		if err != nil {
+			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+				"error": "Invalid end_date format (use YYYY-MM-DD)",
+			})
+		}
+		// Normalize to UTC midnight
+		startDate = time.Date(startDate.Year(), startDate.Month(), startDate.Day(), 0, 0, 0, 0, time.UTC)
+		endDate = time.Date(endDate.Year(), endDate.Month(), endDate.Day(), 0, 0, 0, 0, time.UTC)
+		leaveDays, err = storage.GetLeaveDaysByDateRange(userID, startDate, endDate)
+	} else {
+		// Get all leave days (last year to next year)
+		now := time.Now().UTC()
+		startDate := time.Date(now.Year()-1, 1, 1, 0, 0, 0, 0, time.UTC)
+		endDate := time.Date(now.Year()+1, 12, 31, 0, 0, 0, 0, time.UTC)
+		leaveDays, err = storage.GetLeaveDaysByDateRange(userID, startDate, endDate)
+	}
+
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": err.Error(),
+		})
+	}
+
+	// Add member names
+	members, err := storage.GetAllMembers(userID)
+	if err == nil {
+		memberMap := make(map[int]string)
+		for _, m := range members {
+			memberMap[m.ID] = m.Name
+		}
+		for i := range leaveDays {
+			leaveDays[i].MemberName = memberMap[leaveDays[i].MemberID]
+		}
+	}
+
+	return c.JSON(leaveDays)
+}
+
+// DeleteLeaveDay deletes a leave day
+func DeleteLeaveDay(c *fiber.Ctx) error {
+	userID := GetUserID(c)
+	if userID == 0 {
+		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
+			"error": "Unauthorized",
+		})
+	}
+
+	leaveDayID, err := strconv.Atoi(c.Params("id"))
+	if err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error": "Invalid leave day ID",
+		})
+	}
+
+	if err := storage.DeleteLeaveDay(userID, leaveDayID); err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": err.Error(),
+		})
+	}
+
+	return c.SendStatus(fiber.StatusNoContent)
+}

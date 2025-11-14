@@ -103,6 +103,19 @@ func createSchema() error {
 		FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
 	);`
 
+	// Leave days table
+	createLeaveDaysTable := `
+	CREATE TABLE IF NOT EXISTS leave_days (
+		id INTEGER PRIMARY KEY AUTOINCREMENT,
+		user_id INTEGER NOT NULL,
+		member_id INTEGER NOT NULL,
+		leave_date DATE NOT NULL,
+		created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+		FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+		FOREIGN KEY (member_id) REFERENCES members(id) ON DELETE CASCADE,
+		UNIQUE(user_id, member_id, leave_date)
+	);`
+
 	// Indexes
 	createIndexes := `
 	CREATE INDEX IF NOT EXISTS idx_users_username ON users(username);
@@ -113,6 +126,9 @@ func createSchema() error {
 	CREATE INDEX IF NOT EXISTS idx_shifts_end_date ON shifts(end_date);
 	CREATE INDEX IF NOT EXISTS idx_sessions_token ON sessions(token);
 	CREATE INDEX IF NOT EXISTS idx_sessions_user_id ON sessions(user_id);
+	CREATE INDEX IF NOT EXISTS idx_leave_days_user_id ON leave_days(user_id);
+	CREATE INDEX IF NOT EXISTS idx_leave_days_member_id ON leave_days(member_id);
+	CREATE INDEX IF NOT EXISTS idx_leave_days_date ON leave_days(leave_date);
 	`
 
 	if _, err := DB.Exec(createUsersTable); err != nil {
@@ -128,6 +144,10 @@ func createSchema() error {
 	}
 
 	if _, err := DB.Exec(createSessionsTable); err != nil {
+		return err
+	}
+
+	if _, err := DB.Exec(createLeaveDaysTable); err != nil {
 		return err
 	}
 

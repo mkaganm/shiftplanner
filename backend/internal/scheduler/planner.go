@@ -104,6 +104,23 @@ func PlanShift(userID int, startDate, endDate time.Time) ([]models.Shift, error)
 		}
 	}
 
+	// Get leave days for the planning period
+	leaveDays, err := storage.GetLeaveDaysByDateRange(userID, startDate, endDate)
+	if err != nil {
+		return nil, err
+	}
+
+	// Create a map of member IDs to leave dates for quick lookup
+	// Key: date string (YYYY-MM-DD), Value: set of member IDs on leave
+	memberLeaveMap := make(map[string]map[int]bool)
+	for _, ld := range leaveDays {
+		dateStr := ld.LeaveDate.Format("2006-01-02")
+		if memberLeaveMap[dateStr] == nil {
+			memberLeaveMap[dateStr] = make(map[int]bool)
+		}
+		memberLeaveMap[dateStr][ld.MemberID] = true
+	}
+
 	// Track which member was on duty for each day
 	// Key: date string (YYYY-MM-DD), Value: memberID
 	prevDayMemberMap := make(map[string]int)
@@ -125,6 +142,10 @@ func PlanShift(userID int, startDate, endDate time.Time) ([]models.Shift, error)
 		prevDateStr := prevWorkingDay.Format("2006-01-02")
 		prevDayMemberID := prevDayMemberMap[prevDateStr]
 
+		// Get members on leave for this date
+		currentDateStr := currentDate.Format("2006-01-02")
+		membersOnLeave := memberLeaveMap[currentDateStr]
+
 		// Is this day a long shift?
 		isLongShift := models.WillBeLongShift(currentDate)
 
@@ -132,10 +153,10 @@ func PlanShift(userID int, startDate, endDate time.Time) ([]models.Shift, error)
 		var selectedMemberID int
 		if isLongShift {
 			// Long shift: select member with least long shift days
-			selectedMemberID = selectMemberByLongShift(memberIDs, longShiftDays, prevDayMemberID)
+			selectedMemberID = selectMemberByLongShift(memberIDs, longShiftDays, prevDayMemberID, membersOnLeave)
 		} else {
 			// Normal shift: select member with least normal shift days
-			selectedMemberID = selectMemberByNormalShift(memberIDs, normalShiftDays, prevDayMemberID)
+			selectedMemberID = selectMemberByNormalShift(memberIDs, normalShiftDays, prevDayMemberID, membersOnLeave)
 		}
 
 		// Calculate shift end date
@@ -168,7 +189,6 @@ func PlanShift(userID int, startDate, endDate time.Time) ([]models.Shift, error)
 		}
 
 		// Save member who was on duty today (for next day)
-		currentDateStr := currentDate.Format("2006-01-02")
 		prevDayMemberMap[currentDateStr] = selectedMemberID
 
 		// Move to next day
@@ -180,23 +200,32 @@ func PlanShift(userID int, startDate, endDate time.Time) ([]models.Shift, error)
 
 // selectMemberByNormalShift selects member with least normal shift days
 // Excludes member who was on duty previous day (prevents consecutive shifts)
+// Excludes members on leave for the current date
 // Makes random selection if there's a tie
-func selectMemberByNormalShift(memberIDs []int, normalShiftDays map[int]int, prevMemberID int) int {
+func selectMemberByNormalShift(memberIDs []int, normalShiftDays map[int]int, prevMemberID int, membersOnLeave map[int]bool) int {
 	if len(memberIDs) == 0 {
 		return 0
 	}
 
-	// Exclude member who was on duty previous day
+	// Exclude member who was on duty previous day and members on leave
 	availableIDs := make([]int, 0)
 	for _, id := range memberIDs {
-		if id != prevMemberID {
+		if id != prevMemberID && !membersOnLeave[id] {
 			availableIDs = append(availableIDs, id)
 		}
 	}
 
-	// If all members were on duty yesterday, select one anyway
+	// If all members were on duty yesterday or on leave, select one anyway (excluding those on leave)
 	if len(availableIDs) == 0 {
-		availableIDs = memberIDs
+		for _, id := range memberIDs {
+			if !membersOnLeave[id] {
+				availableIDs = append(availableIDs, id)
+			}
+		}
+		// If all members are on leave, return 0 (no assignment possible)
+		if len(availableIDs) == 0 {
+			return 0
+		}
 	}
 
 	// Find members with least normal shift days
@@ -225,23 +254,32 @@ func selectMemberByNormalShift(memberIDs []int, normalShiftDays map[int]int, pre
 
 // selectMemberByLongShift selects member with least long shift days
 // Excludes member who was on duty previous day (prevents consecutive shifts)
+// Excludes members on leave for the current date
 // Makes random selection if there's a tie
-func selectMemberByLongShift(memberIDs []int, longShiftDays map[int]int, prevMemberID int) int {
+func selectMemberByLongShift(memberIDs []int, longShiftDays map[int]int, prevMemberID int, membersOnLeave map[int]bool) int {
 	if len(memberIDs) == 0 {
 		return 0
 	}
 
-	// Exclude member who was on duty previous day
+	// Exclude member who was on duty previous day and members on leave
 	availableIDs := make([]int, 0)
 	for _, id := range memberIDs {
-		if id != prevMemberID {
+		if id != prevMemberID && !membersOnLeave[id] {
 			availableIDs = append(availableIDs, id)
 		}
 	}
 
-	// If all members were on duty yesterday, select one anyway
+	// If all members were on duty yesterday or on leave, select one anyway (excluding those on leave)
 	if len(availableIDs) == 0 {
-		availableIDs = memberIDs
+		for _, id := range memberIDs {
+			if !membersOnLeave[id] {
+				availableIDs = append(availableIDs, id)
+			}
+		}
+		// If all members are on leave, return 0 (no assignment possible)
+		if len(availableIDs) == 0 {
+			return 0
+		}
 	}
 
 	// Find members with least long shift days

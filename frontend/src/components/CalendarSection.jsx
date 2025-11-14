@@ -3,7 +3,7 @@ import { useApp } from '../context/AppContext';
 import './CalendarSection.css';
 
 export function CalendarSection() {
-  const { currentMonth, currentYear, shifts, holidays, previousMonth, nextMonth, formatDate } = useApp();
+  const { currentMonth, currentYear, shifts, holidays, leaveDays, members, previousMonth, nextMonth, formatDate } = useApp();
 
   // Debug: Log shifts
   console.log('CalendarSection - shifts:', shifts);
@@ -62,6 +62,36 @@ export function CalendarSection() {
       return dateStr >= startDateStr && dateStr <= endDateStr;
     });
 
+    // Filter leave days for this day
+    const dayLeaveDays = leaveDays.filter((leaveDay) => {
+      if (!leaveDay || !leaveDay.leave_date) {
+        return false;
+      }
+      
+      // Handle both string and Date object formats
+      let leaveDateStr;
+      
+      if (typeof leaveDay.leave_date === 'string') {
+        leaveDateStr = leaveDay.leave_date.split('T')[0];
+      } else if (leaveDay.leave_date instanceof Date) {
+        leaveDateStr = formatDate(leaveDay.leave_date);
+      } else {
+        return false;
+      }
+      
+      return leaveDateStr === dateStr;
+    });
+
+    // Get member names for leave days
+    const leaveMemberNames = dayLeaveDays.map((leaveDay) => {
+      if (leaveDay.member_name) {
+        return leaveDay.member_name;
+      }
+      // Fallback: find member by ID
+      const member = members.find(m => m.id === leaveDay.member_id);
+      return member ? member.name : `Member ${leaveDay.member_id}`;
+    });
+
     let classes = 'day';
     if (dayOfWeek === 0 || dayOfWeek === 6) {
       classes += ' weekend';
@@ -86,6 +116,15 @@ export function CalendarSection() {
             className={`shift-name ${shift.is_long_shift ? 'long-shift' : ''}`}
           >
             {shift.member_name || 'Unknown'}
+          </span>
+        ))}
+        {leaveMemberNames.map((memberName, index) => (
+          <span
+            key={`leave-${index}`}
+            className="leave-name"
+            title={`${memberName} is on leave`}
+          >
+            🏖️ {memberName}
           </span>
         ))}
       </div>
