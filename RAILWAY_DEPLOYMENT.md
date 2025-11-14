@@ -20,8 +20,9 @@ Bu projeyi Railway'de deploy etmek için adım adım rehber.
 1. Railway dashboard'da "New Project" butonuna tıklayın
 2. "Deploy from GitHub repo" seçeneğini seçin
 3. Repository'nizi seçin
-4. "Root Directory" olarak `backend` klasörünü seçin
-5. Railway otomatik olarak Go projesini algılayacak
+4. **ÖNEMLİ:** "Root Directory" olarak `backend` klasörünü seçin
+   - Service ayarlarında "Settings" → "Root Directory" → `backend` yazın
+5. Railway otomatik olarak Go projesini algılayacak (veya `nixpacks.toml` dosyasını kullanacak)
 
 #### Backend Environment Variables
 
@@ -40,8 +41,9 @@ ALLOWED_ORIGINS=https://your-frontend-url.railway.app
 1. Railway dashboard'da "New Service" butonuna tıklayın
 2. "Deploy from GitHub repo" seçeneğini seçin
 3. Aynı repository'yi seçin
-4. "Root Directory" olarak `frontend` klasörünü seçin
-5. Railway otomatik olarak Node.js projesini algılayacak
+4. **ÖNEMLİ:** "Root Directory" olarak `frontend` klasörünü seçin
+   - Service ayarlarında "Settings" → "Root Directory" → `frontend` yazın
+5. Railway otomatik olarak Node.js projesini algılayacak (veya `nixpacks.toml` dosyasını kullanacak)
 
 #### Frontend Environment Variables
 
@@ -97,11 +99,22 @@ ALLOWED_ORIGINS=https://your-frontend-url.railway.app
 
 ## Troubleshooting
 
+### Nixpacks build failed hatası
+
+**Sorun:** Railway root dizinde build plan bulamıyor.
+
+**Çözüm:**
+1. Her service için "Root Directory" ayarını yapın:
+   - Backend service → Settings → Root Directory → `backend`
+   - Frontend service → Settings → Root Directory → `frontend`
+2. Service'i yeniden deploy edin
+
 ### Backend başlamıyor
 
 - `PORT` environment variable'ının set olduğundan emin olun
 - Railway logs'u kontrol edin
 - `DATA_DIR` environment variable'ını `/tmp` olarak ayarlayın
+- Root Directory'nin `backend` olarak ayarlandığından emin olun
 
 ### Frontend API'ye bağlanamıyor
 
