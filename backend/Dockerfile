@@ -7,33 +7,25 @@ WORKDIR /app
 COPY backend/go.mod backend/go.sum ./
 RUN go mod download
 
-# Copy entire backend directory (this should include cmd/)
-COPY backend/ ./
+# IMPORTANT: Copy cmd directory FIRST and explicitly
+# This ensures cmd/ is not excluded by .dockerignore
+COPY backend/cmd ./cmd
+
+# Copy rest of backend
+COPY backend/internal ./internal
 
 # Debug: Show what was actually copied
 RUN echo "=== Contents of /app ===" && \
     ls -la /app/ && \
-    echo "=== Looking for cmd ===" && \
-    find /app -maxdepth 2 -type d -name "cmd" 2>/dev/null && \
-    echo "=== Looking for main.go ===" && \
-    find /app -name "main.go" 2>/dev/null && \
-    echo "=== Full directory structure ===" && \
-    find /app -type d -maxdepth 3 2>/dev/null | sort
+    echo "=== cmd directory ===" && \
+    ls -la /app/cmd/ 2>/dev/null || echo "cmd NOT FOUND" && \
+    echo "=== cmd/server directory ===" && \
+    ls -la /app/cmd/server/ 2>/dev/null || echo "cmd/server NOT FOUND" && \
+    echo "=== main.go file ===" && \
+    ls -la /app/cmd/server/main.go 2>/dev/null || echo "main.go NOT FOUND"
 
-# Build - find main.go and build from there
-RUN MAIN_GO=$(find /app -name "main.go" -path "*/cmd/server/*" 2>/dev/null | head -1) && \
-    if [ -n "$MAIN_GO" ]; then \
-        MAIN_DIR=$(dirname "$MAIN_GO") && \
-        echo "Found main.go at: $MAIN_GO" && \
-        echo "Building from directory: $MAIN_DIR" && \
-        cd "$MAIN_DIR" && \
-        CGO_ENABLED=0 GOOS=linux go build -o /app/server .; \
-    else \
-        echo "ERROR: main.go not found in cmd/server!" && \
-        echo "All .go files found:" && \
-        find /app -name "*.go" 2>/dev/null | head -10 && \
-        exit 1; \
-    fi
+# Build the application
+RUN CGO_ENABLED=0 GOOS=linux go build -o server ./cmd/server
 
 # Final stage
 FROM alpine:latest
