@@ -7,23 +7,33 @@ WORKDIR /app
 COPY backend/go.mod backend/go.sum ./
 RUN go mod download
 
-# Copy backend source code - explicitly copy cmd directory first
-# cmd directory might be ignored, so copy it explicitly
-COPY backend/cmd ./cmd
-COPY backend/internal ./internal
+# Copy entire backend directory (this should include cmd/)
+COPY backend/ ./
 
-# Debug: Verify what was copied
-RUN echo "=== Root directory contents ===" && \
+# Debug: Show what was actually copied
+RUN echo "=== Contents of /app ===" && \
     ls -la /app/ && \
-    echo "=== cmd directory ===" && \
-    ls -la /app/cmd/ && \
-    echo "=== cmd/server directory ===" && \
-    ls -la /app/cmd/server/ && \
-    echo "=== main.go file ===" && \
-    ls -la /app/cmd/server/main.go
+    echo "=== Looking for cmd ===" && \
+    find /app -maxdepth 2 -type d -name "cmd" 2>/dev/null && \
+    echo "=== Looking for main.go ===" && \
+    find /app -name "main.go" 2>/dev/null && \
+    echo "=== Full directory structure ===" && \
+    find /app -type d -maxdepth 3 2>/dev/null | sort
 
-# Build the application
-RUN CGO_ENABLED=0 GOOS=linux go build -o server ./cmd/server
+# Build - find main.go and build from there
+RUN MAIN_GO=$(find /app -name "main.go" -path "*/cmd/server/*" 2>/dev/null | head -1) && \
+    if [ -n "$MAIN_GO" ]; then \
+        MAIN_DIR=$(dirname "$MAIN_GO") && \
+        echo "Found main.go at: $MAIN_GO" && \
+        echo "Building from directory: $MAIN_DIR" && \
+        cd "$MAIN_DIR" && \
+        CGO_ENABLED=0 GOOS=linux go build -o /app/server .; \
+    else \
+        echo "ERROR: main.go not found in cmd/server!" && \
+        echo "All .go files found:" && \
+        find /app -name "*.go" 2>/dev/null | head -10 && \
+        exit 1; \
+    fi
 
 # Final stage
 FROM alpine:latest
