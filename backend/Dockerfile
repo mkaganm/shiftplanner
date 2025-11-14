@@ -1,4 +1,4 @@
-# Backend Dockerfile - Works with root context (both local and AWS)
+# Backend Dockerfile - Works with root context
 FROM golang:1.23-alpine AS builder
 
 WORKDIR /app
@@ -7,14 +7,16 @@ WORKDIR /app
 COPY backend/go.mod backend/go.sum ./
 RUN go mod download
 
-# Copy backend source code
-COPY backend/ ./
+# Copy backend source code - explicitly copy each directory
+COPY backend/cmd ./cmd
+COPY backend/internal ./internal
 
-# Debug: Verify directory structure
+# Debug: Verify directory structure BEFORE build
 RUN echo "=== Root directory ===" && ls -la /app/ && \
-    echo "=== cmd directory ===" && (ls -la /app/cmd/ || echo "cmd not found") && \
-    echo "=== cmd/server directory ===" && (ls -la /app/cmd/server/ || echo "cmd/server not found") && \
-    echo "=== Finding cmd directories ===" && find /app -type d -name "cmd" 2>/dev/null || echo "No cmd directories found"
+    echo "=== cmd directory ===" && ls -la /app/cmd/ && \
+    echo "=== cmd/server directory ===" && ls -la /app/cmd/server/ && \
+    echo "=== cmd/server/main.go ===" && ls -la /app/cmd/server/main.go && \
+    echo "=== Finding all .go files in cmd ===" && find /app/cmd -name "*.go" 2>/dev/null || echo "No .go files found"
 
 # Build the application
 RUN CGO_ENABLED=0 GOOS=linux go build -o server ./cmd/server
