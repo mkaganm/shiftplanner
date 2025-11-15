@@ -19,12 +19,8 @@ services:
       - backend-data:/data
     networks:
       - shiftplanner-network
-    healthcheck:
-      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:8080/api/holidays"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 40s
+    # Healthcheck removed - scratch image has no shell
+    # Use external monitoring or switch to distroless for healthcheck support
 
   frontend:
     build:

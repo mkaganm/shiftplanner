@@ -4,6 +4,7 @@
 
 # Documentation
 *.md
+README.md
 
 # Build artifacts
 server
@@ -11,14 +12,18 @@ server
 *.dll
 *.so
 *.dylib
+*.test
 
 # Test files
 *_test.go
 testdata
+**/*_test.go
 
 # IDE
 .vscode
 .idea
+*.swp
+*.swo
 
 # OS
 .DS_Store
@@ -27,4 +32,17 @@ Thumbs.db
 # Data
 data/
 *.db
+*.db-journal
 
+# Temporary files
+*.tmp
+*.log
+*.out
+
+# Coverage
+coverage/
+*.coverprofile
+
+# Go workspace files
+go.work
+go.work.sum
