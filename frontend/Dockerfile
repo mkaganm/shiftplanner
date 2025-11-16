@@ -26,6 +26,10 @@ RUN --mount=type=cache,target=/app/node_modules/.vite \
 # Production stage - nginx alpine (already minimal, ~23MB)
 FROM nginx:alpine
 
+# Install wget for healthcheck (only ~200KB)
+RUN apk add --no-cache wget && \
+    rm -rf /var/cache/apk/*
+
 # Remove default nginx config
 RUN rm -rf /etc/nginx/conf.d/default.conf
 
@@ -46,11 +50,11 @@ RUN mkdir -p /var/cache/nginx/client_temp && \
     chown -R nginx:nginx /etc/nginx/conf.d
 
 # Expose port
-EXPOSE 80
+EXPOSE 3000
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
-    CMD wget --quiet --tries=1 --spider http://localhost/ || exit 1
+    CMD wget --quiet --tries=1 --spider http://localhost:3000/ || exit 1
 
 # Start nginx
 CMD ["nginx", "-g", "daemon off;"]

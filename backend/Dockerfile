@@ -1,4 +1,4 @@
-# Backend Dockerfile - Optimized with scratch (ultra-lightweight, ~5MB vs Alpine ~5MB)
+# Backend Dockerfile - Optimized with alpine (minimal + healthcheck support)
 FROM golang:1.23-alpine AS builder
 
 WORKDIR /app
@@ -25,21 +25,38 @@ RUN --mount=type=cache,target=/root/.cache/go-build \
     -installsuffix netgo \
     -o server ./cmd/server
 
-# Final stage - scratch (empty image, only binary, ~0MB base + binary size)
-FROM scratch
+# Final stage - alpine minimal (supports healthcheck)
+FROM alpine:latest
 
-# Copy ca-certificates from alpine for HTTPS support
-COPY --from=builder /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/
+# Install only ca-certificates and wget for healthcheck
+RUN apk --no-cache add ca-certificates wget && \
+    rm -rf /var/cache/apk/*
+
+WORKDIR /root/
 
 # Copy only the binary from builder
-COPY --from=builder /app/server /server
+COPY --from=builder /app/server .
+
+# Create data directory
+RUN mkdir -p /data
+
+# Expose port
+EXPOSE 8080
 
 # Set environment variables
 ENV PORT=8080 \
     DATA_DIR=/data
 
-# Expose port
-EXPOSE 8080
+# Health check - use /api/holidays endpoint (unprotected)
+HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
+    CMD wget --quiet --tries=1 --spider http://localhost:${PORT}/api/holidays || exit 1
+
+# Use non-root user for security
+RUN addgroup -g 1000 appuser && \
+    adduser -D -u 1000 -G appuser appuser && \
+    chown -R appuser:appuser /root /data
+
+USER appuser
 
 # Run the server
-ENTRYPOINT ["/server"]
+ENTRYPOINT ["./server"]
