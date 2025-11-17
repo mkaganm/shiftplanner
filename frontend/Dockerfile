@@ -1,5 +1,5 @@
-# Frontend Dockerfile - Optimized for performance
-FROM node:20-slim AS builder
+# Frontend Dockerfile - Development mode with Vite dev server
+FROM node:20-slim
 
 WORKDIR /app
 
@@ -19,42 +19,17 @@ COPY frontend/ ./
 ARG VITE_API_URL
 ENV VITE_API_URL=$VITE_API_URL
 
-# Build the application with cache mount
-RUN --mount=type=cache,target=/app/node_modules/.vite \
-    npm run build
-
-# Production stage - nginx alpine (already minimal, ~23MB)
-FROM nginx:alpine
-
-# Install wget for healthcheck (only ~200KB)
-RUN apk add --no-cache wget && \
-    rm -rf /var/cache/apk/*
-
-# Remove default nginx config
-RUN rm -rf /etc/nginx/conf.d/default.conf
-
-# Copy built files from builder
-COPY --from=builder /app/dist /usr/share/nginx/html
-
-# Copy nginx configuration
-COPY frontend/nginx.conf /etc/nginx/conf.d/default.conf
-
-# Create nginx cache directory and set permissions
-RUN mkdir -p /var/cache/nginx/client_temp && \
-    mkdir -p /var/cache/nginx/proxy_temp && \
-    mkdir -p /var/cache/nginx/fastcgi_temp && \
-    mkdir -p /var/cache/nginx/uwsgi_temp && \
-    mkdir -p /var/cache/nginx/scgi_temp && \
-    chown -R nginx:nginx /var/cache/nginx && \
-    chown -R nginx:nginx /usr/share/nginx/html && \
-    chown -R nginx:nginx /etc/nginx/conf.d
-
 # Expose port
 EXPOSE 3000
 
+# Install wget for healthcheck
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends wget && \
+    rm -rf /var/lib/apt/lists/*
+
 # Health check
-HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
+HEALTHCHECK --interval=30s --timeout=3s --start-period=10s --retries=3 \
     CMD wget --quiet --tries=1 --spider http://localhost:3000/ || exit 1
 
-# Start nginx
-CMD ["nginx", "-g", "daemon off;"]
+# Start Vite dev server
+CMD ["npm", "run", "dev", "--", "--host", "0.0.0.0", "--port", "3000"]
