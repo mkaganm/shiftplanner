@@ -35,10 +35,10 @@ func main() {
 	// Middleware
 	app.Use(logger.New())
 
-	// Get allowed origins from environment variable or use default
+	// Get allowed origins from environment variable or use default (allow all)
 	allowedOriginsStr := os.Getenv("ALLOWED_ORIGINS")
 	if allowedOriginsStr == "" {
-		allowedOriginsStr = "http://localhost:3000,http://127.0.0.1:3000"
+		allowedOriginsStr = "*" // Allow all origins by default
 	}
 
 	// Split comma-separated origins
