@@ -10,7 +10,7 @@ services:
     environment:
       - PORT=8080
       - DATA_DIR=/data
-      - ALLOWED_ORIGINS=${ALLOWED_ORIGINS:-http://localhost:3000,http://127.0.0.1:3000}
+      - ALLOWED_ORIGINS=${ALLOWED_ORIGINS:-*}
     volumes:
       - backend-data:/data
     networks:
@@ -27,7 +27,7 @@ services:
       context: .
       dockerfile: ./frontend/Dockerfile
       args:
-        - VITE_API_URL=http://127.0.0.1:8080
+        - VITE_API_URL=http://backend:8080
     container_name: shiftplanner-frontend
     restart: unless-stopped
     ports:

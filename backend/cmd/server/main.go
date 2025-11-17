@@ -3,9 +3,9 @@ package main
 import (
 	"log"
 	"os"
-	"strings"
 	"shiftplanner/backend/internal/api"
 	"shiftplanner/backend/internal/database"
+	"strings"
 
 	"github.com/gofiber/fiber/v2"
 	"github.com/gofiber/fiber/v2/middleware/cors"
@@ -34,25 +34,38 @@ func main() {
 
 	// Middleware
 	app.Use(logger.New())
-	
+
 	// Get allowed origins from environment variable or use default
 	allowedOriginsStr := os.Getenv("ALLOWED_ORIGINS")
 	if allowedOriginsStr == "" {
 		allowedOriginsStr = "http://localhost:3000,http://127.0.0.1:3000"
 	}
-	
+
 	// Split comma-separated origins
 	allowedOrigins := []string{}
+	hasWildcard := false
 	for _, origin := range strings.Split(allowedOriginsStr, ",") {
-		allowedOrigins = append(allowedOrigins, strings.TrimSpace(origin))
+		trimmed := strings.TrimSpace(origin)
+		if trimmed == "*" {
+			hasWildcard = true
+		} else {
+			allowedOrigins = append(allowedOrigins, trimmed)
+		}
 	}
-	
-	app.Use(cors.New(cors.Config{
-		AllowOrigins:     strings.Join(allowedOrigins, ","),
+
+	corsConfig := cors.Config{
 		AllowMethods:     "GET, POST, PUT, DELETE, OPTIONS",
 		AllowHeaders:     "Content-Type, Authorization",
-		AllowCredentials: true,
-	}))
+		AllowCredentials: !hasWildcard, // Wildcard ile credentials çalışmaz
+	}
+
+	if hasWildcard {
+		corsConfig.AllowOrigins = "*"
+	} else {
+		corsConfig.AllowOrigins = strings.Join(allowedOrigins, ",")
+	}
+
+	app.Use(cors.New(corsConfig))
 
 	// Auth routes (unprotected)
 	app.Post("/api/auth/register", api.Register)
