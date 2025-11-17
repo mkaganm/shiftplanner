@@ -24,11 +24,10 @@ EXPOSE 8080
 RUN mkdir -p /data && \
     addgroup -g 1000 appuser && \
     adduser -D -u 1000 -G appuser appuser && \
-    chown -R appuser:appuser /root /data
+    chown -R appuser:appuser /root
 
 HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
     CMD wget --quiet --tries=1 --spider http://localhost:${PORT}/api/holidays || exit 1
 
-USER appuser
-
-CMD ["./server"]
+# Fix permissions and switch to appuser
+ENTRYPOINT ["sh", "-c", "chown -R appuser:appuser /data && chmod -R 755 /data && su appuser -c './server'"]
