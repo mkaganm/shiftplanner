@@ -3,6 +3,7 @@ package main
 import (
 	"log"
 	"os"
+	"strings"
 	"shiftplanner/backend/internal/api"
 	"shiftplanner/backend/internal/database"
 
@@ -35,16 +36,22 @@ func main() {
 	app.Use(logger.New())
 	
 	// Get allowed origins from environment variable or use default
-	allowedOrigins := os.Getenv("ALLOWED_ORIGINS")
-	if allowedOrigins == "" {
-		allowedOrigins = "http://localhost:3000"
+	allowedOriginsStr := os.Getenv("ALLOWED_ORIGINS")
+	if allowedOriginsStr == "" {
+		allowedOriginsStr = "http://localhost:3000,http://127.0.0.1:3000"
+	}
+	
+	// Split comma-separated origins
+	allowedOrigins := []string{}
+	for _, origin := range strings.Split(allowedOriginsStr, ",") {
+		allowedOrigins = append(allowedOrigins, strings.TrimSpace(origin))
 	}
 	
 	app.Use(cors.New(cors.Config{
-		AllowOrigins:     allowedOrigins,
+		AllowOrigins:     strings.Join(allowedOrigins, ","),
 		AllowMethods:     "GET, POST, PUT, DELETE, OPTIONS",
 		AllowHeaders:     "Content-Type, Authorization",
-		AllowCredentials: true, // Allow credentials for session management
+		AllowCredentials: true,
 	}))
 
 	// Auth routes (unprotected)
