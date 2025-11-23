@@ -1,14 +1,20 @@
 package api
 
 import (
+	"bytes"
+	"encoding/csv"
+	"fmt"
+	"io"
 	"log"
 	"shiftplanner/backend/internal/models"
 	"shiftplanner/backend/internal/scheduler"
 	"shiftplanner/backend/internal/storage"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/gofiber/fiber/v2"
+	"github.com/xuri/excelize/v2"
 )
 
 // GetMembers returns all members
@@ -540,4 +546,224 @@ func UpdateShiftForDate(c *fiber.Ctx) error {
 	}
 
 	return c.JSON(shift)
+}
+
+// ImportShifts imports shifts from CSV or Excel file
+func ImportShifts(c *fiber.Ctx) error {
+	userID := GetUserID(c)
+	if userID == 0 {
+		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
+			"error": "Unauthorized",
+		})
+	}
+
+	// Get uploaded file
+	file, err := c.FormFile("file")
+	if err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error": "No file uploaded",
+		})
+	}
+
+	// Open file
+	src, err := file.Open()
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": "Failed to open file",
+		})
+	}
+	defer src.Close()
+
+	// Determine file type by extension
+	filename := strings.ToLower(file.Filename)
+	var rows [][]string
+
+	if strings.HasSuffix(filename, ".csv") {
+		// Parse CSV
+		reader := csv.NewReader(src)
+		reader.TrimLeadingSpace = true
+		rows, err = reader.ReadAll()
+		if err != nil {
+			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+				"error": fmt.Sprintf("Failed to parse CSV: %v", err),
+			})
+		}
+	} else if strings.HasSuffix(filename, ".xlsx") || strings.HasSuffix(filename, ".xls") {
+		// Parse Excel
+		// Read file into memory
+		fileBytes, err := io.ReadAll(src)
+		if err != nil {
+			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+				"error": "Failed to read file",
+			})
+		}
+
+		// Open Excel file
+		xlFile, err := excelize.OpenReader(bytes.NewReader(fileBytes))
+		if err != nil {
+			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+				"error": fmt.Sprintf("Failed to parse Excel: %v", err),
+			})
+		}
+		defer xlFile.Close()
+
+		// Get first sheet
+		sheetName := xlFile.GetSheetName(0)
+		if sheetName == "" {
+			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+				"error": "Excel file has no sheets",
+			})
+		}
+
+		// Read all rows from first sheet
+		rows, err = xlFile.GetRows(sheetName)
+		if err != nil {
+			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+				"error": fmt.Sprintf("Failed to read Excel sheet: %v", err),
+			})
+		}
+	} else {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error": "Unsupported file format. Please upload CSV or Excel (.xlsx, .xls) file",
+		})
+	}
+
+	if len(rows) == 0 {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error": "File is empty",
+		})
+	}
+
+	// Process rows
+	type ImportResult struct {
+		MembersCreated int `json:"members_created"`
+		ShiftsCreated   int `json:"shifts_created"`
+		Errors          []string `json:"errors"`
+	}
+
+	result := ImportResult{
+		Errors: []string{},
+	}
+
+	// Map to track member names to IDs
+	memberMap := make(map[string]int)
+
+	// Process each row (skip header if exists)
+	startRow := 0
+	if len(rows) > 0 && len(rows[0]) >= 2 {
+		// Check if first row looks like a header (contains "date" or "name" keywords)
+		firstRowLower := strings.ToLower(strings.Join(rows[0], " "))
+		if strings.Contains(firstRowLower, "date") || strings.Contains(firstRowLower, "name") {
+			startRow = 1
+		}
+	}
+
+	for i := startRow; i < len(rows); i++ {
+		row := rows[i]
+		if len(row) < 2 {
+			result.Errors = append(result.Errors, fmt.Sprintf("Row %d: Insufficient columns (need at least 2)", i+1))
+			continue
+		}
+
+		// Parse date (first column)
+		dateStr := strings.TrimSpace(row[0])
+		if dateStr == "" {
+			result.Errors = append(result.Errors, fmt.Sprintf("Row %d: Empty date", i+1))
+			continue
+		}
+
+		// Try multiple date formats
+		var date time.Time
+		dateFormats := []string{
+			"2006-01-02",
+			"02/01/2006",
+			"01/02/2006",
+			"2006/01/02",
+			"02-01-2006",
+			"01-02-2006",
+			"2006-1-2",
+		}
+
+		parsed := false
+		for _, format := range dateFormats {
+			if t, err := time.Parse(format, dateStr); err == nil {
+				date = t
+				parsed = true
+				break
+			}
+		}
+
+		if !parsed {
+			result.Errors = append(result.Errors, fmt.Sprintf("Row %d: Invalid date format '%s'", i+1, dateStr))
+			continue
+		}
+
+		// Parse name (second column)
+		name := strings.TrimSpace(row[1])
+		if name == "" {
+			result.Errors = append(result.Errors, fmt.Sprintf("Row %d: Empty name", i+1))
+			continue
+		}
+
+		// Get or create member
+		memberID, exists := memberMap[name]
+		if !exists {
+			// Try to find existing member
+			member, err := storage.GetMemberByName(userID, name)
+			if err != nil {
+				// Member doesn't exist, create it
+				newMember, err := storage.CreateMember(userID, name)
+				if err != nil {
+					result.Errors = append(result.Errors, fmt.Sprintf("Row %d: Failed to create member '%s': %v", i+1, name, err))
+					continue
+				}
+				memberID = newMember.ID
+				result.MembersCreated++
+			} else {
+				memberID = member.ID
+			}
+			memberMap[name] = memberID
+		}
+
+		// Normalize date to UTC midnight
+		dateUTC := time.Date(date.Year(), date.Month(), date.Day(), 0, 0, 0, 0, time.UTC)
+
+		// Skip holidays and weekends - only create shifts for working days
+		if !models.IsWorkingDay(dateUTC) {
+			// Still create shift for holidays/weekends if explicitly provided in import
+			// This allows manual override of holiday shifts
+		}
+
+		// Check if shift already exists for this date
+		existingShift, err := storage.GetShiftByDate(userID, dateUTC)
+		if err != nil {
+			result.Errors = append(result.Errors, fmt.Sprintf("Row %d: Failed to check existing shift: %v", i+1, err))
+			continue
+		}
+
+		if existingShift != nil {
+			// Update existing shift
+			if err := storage.UpdateShiftMember(userID, existingShift.ID, memberID); err != nil {
+				result.Errors = append(result.Errors, fmt.Sprintf("Row %d: Failed to update shift: %v", i+1, err))
+				continue
+			}
+		} else {
+			// Create new shift
+			// Determine if it's a long shift (next day is holiday or weekend)
+			isLongShift := false
+			nextDay := dateUTC.AddDate(0, 0, 1)
+			if models.IsHoliday(nextDay) || models.IsWeekend(nextDay) {
+				isLongShift = true
+			}
+
+			_, err := storage.CreateShift(userID, memberID, dateUTC, dateUTC, isLongShift)
+			if err != nil {
+				result.Errors = append(result.Errors, fmt.Sprintf("Row %d: Failed to create shift: %v", i+1, err))
+				continue
+			}
+			result.ShiftsCreated++
+		}
+	}
+
+	return c.Status(fiber.StatusOK).JSON(result)
 }

@@ -62,26 +62,22 @@ func PlanShift(userID int, startDate, endDate time.Time) ([]models.Shift, error)
 		memberIDs[i] = m.ID
 	}
 
-	// Two separate maps: normal shift days and long shift days
-	// Key: memberID, Value: shift days count
-	normalShiftDays := make(map[int]int) // memberID -> total normal shift days
-	longShiftDays := make(map[int]int)   // memberID -> total long shift days
+	// Two separate maps: hidden normal shift days and hidden long shift days
+	// Key: memberID, Value: hidden shift days count
+	// These are the hidden counters stored in the database, not the visible shift counts
+	normalShiftDays := make(map[int]int) // memberID -> hidden normal shift days
+	longShiftDays := make(map[int]int)   // memberID -> hidden long shift days
 
-	// Get all shifts from database and calculate actual day counts
-	allShifts, err := storage.GetShiftsByDateRange(userID, time.Date(2000, 1, 1, 0, 0, 0, 0, time.UTC), time.Date(2100, 1, 1, 0, 0, 0, 0, time.UTC))
+	// Get hidden shift counts from database (not visible shift counts)
+	hiddenCounts, err := storage.GetAllHiddenShiftCounts(userID)
 	if err == nil {
-		// Calculate days for each shift and add to corresponding map
-		for _, shift := range allShifts {
-			days := int(shift.EndDate.Sub(shift.StartDate).Hours()/24) + 1
-			if shift.IsLongShift {
-				longShiftDays[shift.MemberID] += days
-			} else {
-				normalShiftDays[shift.MemberID] += days
-			}
+		for memberID, counts := range hiddenCounts {
+			normalShiftDays[memberID] = counts.NormalShifts
+			longShiftDays[memberID] = counts.LongShifts
 		}
 	}
 
-	// Initialize maps for all members (0 for members without shifts)
+	// Initialize maps for all members (0 for members without hidden counts)
 	for _, id := range memberIDs {
 		if _, exists := normalShiftDays[id]; !exists {
 			normalShiftDays[id] = 0
@@ -180,7 +176,8 @@ func PlanShift(userID int, startDate, endDate time.Time) ([]models.Shift, error)
 		}
 		shifts = append(shifts, shift)
 
-		// Update shift day counts immediately (for next day)
+		// Update hidden shift day counts immediately (for next day)
+		// Note: Actual database update happens when shifts are saved via CreateShift
 		shiftDays := int(endDateForShift.Sub(currentDate).Hours()/24) + 1
 		if isLongShift {
 			longShiftDays[selectedMemberID] += shiftDays

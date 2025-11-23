@@ -39,8 +39,41 @@ func GetAllMembers(userID int) ([]models.Member, error) {
 }
 
 // CreateMember creates a new member
+// When a new member is created, their hidden shift counters are initialized
+// to the average of all other members' hidden shift counters
 func CreateMember(userID int, name string) (*models.Member, error) {
-	result, err := database.DB.Exec("INSERT INTO members (user_id, name) VALUES (?, ?)", userID, name)
+	// Calculate average hidden shifts for existing members
+	avgNormalShifts := 0
+	avgLongShifts := 0
+
+	// Get all existing members for this user
+	existingMembers, err := GetAllMembers(userID)
+	if err == nil && len(existingMembers) > 0 {
+		// Calculate average hidden shifts
+		totalNormalShifts := 0
+		totalLongShifts := 0
+		count := 0
+
+		for _, member := range existingMembers {
+			normalShifts, longShifts, err := GetHiddenShiftCounts(userID, member.ID)
+			if err == nil {
+				totalNormalShifts += normalShifts
+				totalLongShifts += longShifts
+				count++
+			}
+		}
+
+		if count > 0 {
+			avgNormalShifts = totalNormalShifts / count
+			avgLongShifts = totalLongShifts / count
+		}
+	}
+
+	// Insert new member with average hidden shift counts
+	result, err := database.DB.Exec(
+		"INSERT INTO members (user_id, name, hidden_normal_shifts, hidden_long_shifts) VALUES (?, ?, ?, ?)",
+		userID, name, avgNormalShifts, avgLongShifts,
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -83,7 +116,28 @@ func GetMemberByID(userID, memberID int) (*models.Member, error) {
 	return &m, nil
 }
 
+// GetMemberByName gets a member by name (case-insensitive, can only get own members)
+func GetMemberByName(userID int, name string) (*models.Member, error) {
+	var m models.Member
+	var createdAtStr string
+	err := database.DB.QueryRow("SELECT id, name, created_at FROM members WHERE LOWER(name) = LOWER(?) AND user_id = ?", name, userID).
+		Scan(&m.ID, &m.Name, &createdAtStr)
+	if err != nil {
+		return nil, err
+	}
+	// Parse SQLite datetime format
+	if t, err := time.Parse("2006-01-02 15:04:05", createdAtStr); err == nil {
+		m.CreatedAt = t
+	} else if t, err := time.Parse("2006-01-02T15:04:05Z07:00", createdAtStr); err == nil {
+		m.CreatedAt = t
+	} else {
+		m.CreatedAt = time.Now()
+	}
+	return &m, nil
+}
+
 // CreateShift creates a new shift record
+// Also updates hidden shift counters for the member
 func CreateShift(userID, memberID int, startDate, endDate time.Time, isLongShift bool) (*models.Shift, error) {
 	// Validate dates are not zero
 	if startDate.IsZero() || endDate.IsZero() {
@@ -108,6 +162,16 @@ func CreateShift(userID, memberID int, startDate, endDate time.Time, isLongShift
 	id, err := result.LastInsertId()
 	if err != nil {
 		return nil, err
+	}
+
+	// Calculate shift days
+	shiftDays := int(endDateUTC.Sub(startDateUTC).Hours()/24) + 1
+
+	// Update hidden shift counters
+	if isLongShift {
+		UpdateHiddenShiftCounts(userID, memberID, 0, shiftDays)
+	} else {
+		UpdateHiddenShiftCounts(userID, memberID, shiftDays, 0)
 	}
 
 	return &models.Shift{
@@ -150,9 +214,9 @@ func GetShiftsByDateRange(userID int, startDate, endDate time.Time) ([]models.Sh
 			log.Printf("Warning: Shift ID %d has empty start_date, skipping", s.ID)
 			continue
 		}
-		
+
 		var startTime time.Time
-		
+
 		// Try parsing as "2006-01-02" first
 		if t, parseErr := time.Parse("2006-01-02", startDateStr); parseErr == nil {
 			startTime = t
@@ -170,7 +234,7 @@ func GetShiftsByDateRange(userID int, startDate, endDate time.Time) ([]models.Sh
 				}
 			}
 		}
-		
+
 		// Normalize to UTC midnight
 		s.StartDate = time.Date(startTime.Year(), startTime.Month(), startTime.Day(), 0, 0, 0, 0, time.UTC)
 
@@ -180,9 +244,9 @@ func GetShiftsByDateRange(userID int, startDate, endDate time.Time) ([]models.Sh
 			log.Printf("Warning: Shift ID %d has empty end_date, skipping", s.ID)
 			continue
 		}
-		
+
 		var endTime time.Time
-		
+
 		// Try parsing as "2006-01-02" first
 		if t, parseErr := time.Parse("2006-01-02", endDateStr); parseErr == nil {
 			endTime = t
@@ -200,7 +264,7 @@ func GetShiftsByDateRange(userID int, startDate, endDate time.Time) ([]models.Sh
 				}
 			}
 		}
-		
+
 		// Normalize to UTC midnight
 		s.EndDate = time.Date(endTime.Year(), endTime.Month(), endTime.Day(), 0, 0, 0, 0, time.UTC)
 
@@ -273,13 +337,30 @@ func GetAllMembersStats(userID int) (map[int]models.MemberStats, error) {
 
 // DeleteShiftsByDateRange deletes shifts that overlap with the date range
 // This ensures we don't have duplicate shifts when regenerating
+// Also updates hidden shift counters for affected members
 func DeleteShiftsByDateRange(userID int, startDate, endDate time.Time) error {
 	startDateStr := startDate.Format("2006-01-02")
 	endDateStr := endDate.Format("2006-01-02")
 
+	// Get shifts that will be deleted to update hidden counters
+	shiftsToDelete, err := GetShiftsByDateRange(userID, startDate, endDate)
+	if err != nil {
+		return err
+	}
+
+	// Update hidden shift counters before deletion
+	for _, shift := range shiftsToDelete {
+		shiftDays := int(shift.EndDate.Sub(shift.StartDate).Hours()/24) + 1
+		if shift.IsLongShift {
+			UpdateHiddenShiftCounts(userID, shift.MemberID, 0, -shiftDays)
+		} else {
+			UpdateHiddenShiftCounts(userID, shift.MemberID, -shiftDays, 0)
+		}
+	}
+
 	// Delete shifts that overlap with the date range
 	// A shift overlaps if: start_date <= endDate AND end_date >= startDate
-	_, err := database.DB.Exec(
+	_, err = database.DB.Exec(
 		"DELETE FROM shifts WHERE user_id = ? AND start_date <= ? AND end_date >= ?",
 		userID, endDateStr, startDateStr,
 	)
@@ -287,8 +368,25 @@ func DeleteShiftsByDateRange(userID int, startDate, endDate time.Time) error {
 }
 
 // DeleteAllShifts deletes all shifts for a user
+// Also resets hidden shift counters for all members
 func DeleteAllShifts(userID int) error {
-	_, err := database.DB.Exec(
+	// Get all shifts to update hidden counters
+	allShifts, err := GetShiftsByDateRange(userID, time.Date(2000, 1, 1, 0, 0, 0, 0, time.UTC), time.Date(2100, 1, 1, 0, 0, 0, 0, time.UTC))
+	if err != nil {
+		return err
+	}
+
+	// Update hidden shift counters before deletion
+	for _, shift := range allShifts {
+		shiftDays := int(shift.EndDate.Sub(shift.StartDate).Hours()/24) + 1
+		if shift.IsLongShift {
+			UpdateHiddenShiftCounts(userID, shift.MemberID, 0, -shiftDays)
+		} else {
+			UpdateHiddenShiftCounts(userID, shift.MemberID, -shiftDays, 0)
+		}
+	}
+
+	_, err = database.DB.Exec(
 		"DELETE FROM shifts WHERE user_id = ?",
 		userID,
 	)
@@ -298,16 +396,16 @@ func DeleteAllShifts(userID int) error {
 // GetShiftByDate gets a shift that covers a specific date
 func GetShiftByDate(userID int, date time.Time) (*models.Shift, error) {
 	dateStr := date.Format("2006-01-02")
-	
+
 	var s models.Shift
 	var startDateStr, endDateStr, createdAtStr string
 	var isLongShift int
-	
+
 	err := database.DB.QueryRow(
 		"SELECT id, member_id, start_date, end_date, is_long_shift, created_at FROM shifts WHERE user_id = ? AND start_date <= ? AND end_date >= ? LIMIT 1",
 		userID, dateStr, dateStr,
 	).Scan(&s.ID, &s.MemberID, &startDateStr, &endDateStr, &isLongShift, &createdAtStr)
-	
+
 	if err != nil {
 		if err == sql.ErrNoRows {
 			return nil, nil // No shift found
@@ -342,7 +440,7 @@ func GetShiftByDate(userID int, date time.Time) (*models.Shift, error) {
 	s.EndDate = time.Date(endTime.Year(), endTime.Month(), endTime.Day(), 0, 0, 0, 0, time.UTC)
 
 	s.IsLongShift = isLongShift == 1
-	
+
 	// Parse created_at
 	if t, err := time.Parse("2006-01-02 15:04:05", createdAtStr); err == nil {
 		s.CreatedAt = t.UTC()
@@ -356,12 +454,70 @@ func GetShiftByDate(userID int, date time.Time) (*models.Shift, error) {
 }
 
 // UpdateShiftMember updates the member for a shift
+// Also updates hidden shift counters for both old and new members
 func UpdateShiftMember(userID, shiftID, newMemberID int) error {
-	_, err := database.DB.Exec(
+	// Get the shift to find old member and shift details
+	var oldMemberID int
+	var startDateStr, endDateStr string
+	var isLongShift int
+
+	err := database.DB.QueryRow(
+		"SELECT member_id, start_date, end_date, is_long_shift FROM shifts WHERE id = ? AND user_id = ?",
+		shiftID, userID,
+	).Scan(&oldMemberID, &startDateStr, &endDateStr, &isLongShift)
+	if err != nil {
+		return err
+	}
+
+	// If member didn't change, no need to update counters
+	if oldMemberID == newMemberID {
+		_, err := database.DB.Exec(
+			"UPDATE shifts SET member_id = ? WHERE id = ? AND user_id = ?",
+			newMemberID, shiftID, userID,
+		)
+		return err
+	}
+
+	// Parse dates
+	var startDate, endDate time.Time
+	if t, err := time.Parse("2006-01-02", startDateStr); err == nil {
+		startDate = t
+	} else if t, err := time.Parse(time.RFC3339, startDateStr); err == nil {
+		startDate = t
+	} else {
+		return fmt.Errorf("error parsing start_date: %v", err)
+	}
+
+	if t, err := time.Parse("2006-01-02", endDateStr); err == nil {
+		endDate = t
+	} else if t, err := time.Parse(time.RFC3339, endDateStr); err == nil {
+		endDate = t
+	} else {
+		return fmt.Errorf("error parsing end_date: %v", err)
+	}
+
+	// Calculate shift days
+	shiftDays := int(endDate.Sub(startDate).Hours()/24) + 1
+
+	// Update shift member
+	_, err = database.DB.Exec(
 		"UPDATE shifts SET member_id = ? WHERE id = ? AND user_id = ?",
 		newMemberID, shiftID, userID,
 	)
-	return err
+	if err != nil {
+		return err
+	}
+
+	// Update hidden shift counters: decrease for old member, increase for new member
+	if isLongShift == 1 {
+		UpdateHiddenShiftCounts(userID, oldMemberID, 0, -shiftDays)
+		UpdateHiddenShiftCounts(userID, newMemberID, 0, shiftDays)
+	} else {
+		UpdateHiddenShiftCounts(userID, oldMemberID, -shiftDays, 0)
+		UpdateHiddenShiftCounts(userID, newMemberID, shiftDays, 0)
+	}
+
+	return nil
 }
 
 // CreateOrUpdateShiftForDate creates or updates a shift for a specific date
@@ -382,7 +538,7 @@ func CreateOrUpdateShiftForDate(userID, memberID int, date time.Time) (*models.S
 		if err := UpdateShiftMember(userID, existingShift.ID, memberID); err != nil {
 			return nil, err
 		}
-		
+
 		// Fetch updated shift
 		updatedShift, err := GetShiftByDate(userID, dateUTC)
 		if err != nil {
@@ -647,4 +803,70 @@ func DeleteLeaveDay(userID, leaveDayID int) error {
 		leaveDayID, userID,
 	)
 	return err
+}
+
+// GetHiddenShiftCounts gets hidden shift counts for a member
+func GetHiddenShiftCounts(userID, memberID int) (normalShifts int, longShifts int, err error) {
+	err = database.DB.QueryRow(
+		"SELECT COALESCE(hidden_normal_shifts, 0), COALESCE(hidden_long_shifts, 0) FROM members WHERE id = ? AND user_id = ?",
+		memberID, userID,
+	).Scan(&normalShifts, &longShifts)
+	if err != nil {
+		return 0, 0, err
+	}
+	return normalShifts, longShifts, nil
+}
+
+// UpdateHiddenShiftCounts updates hidden shift counts for a member
+func UpdateHiddenShiftCounts(userID, memberID int, normalShiftsDelta, longShiftsDelta int) error {
+	// Get current counts
+	currentNormal, currentLong, err := GetHiddenShiftCounts(userID, memberID)
+	if err != nil {
+		return err
+	}
+
+	// Update with deltas
+	newNormal := currentNormal + normalShiftsDelta
+	newLong := currentLong + longShiftsDelta
+
+	// Ensure non-negative
+	if newNormal < 0 {
+		newNormal = 0
+	}
+	if newLong < 0 {
+		newLong = 0
+	}
+
+	_, err = database.DB.Exec(
+		"UPDATE members SET hidden_normal_shifts = ?, hidden_long_shifts = ? WHERE id = ? AND user_id = ?",
+		newNormal, newLong, memberID, userID,
+	)
+	return err
+}
+
+// GetAllHiddenShiftCounts gets hidden shift counts for all members
+func GetAllHiddenShiftCounts(userID int) (map[int]struct{ NormalShifts, LongShifts int }, error) {
+	rows, err := database.DB.Query(
+		"SELECT id, COALESCE(hidden_normal_shifts, 0), COALESCE(hidden_long_shifts, 0) FROM members WHERE user_id = ?",
+		userID,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	counts := make(map[int]struct{ NormalShifts, LongShifts int })
+	for rows.Next() {
+		var memberID int
+		var normalShifts, longShifts int
+		if err := rows.Scan(&memberID, &normalShifts, &longShifts); err != nil {
+			return nil, err
+		}
+		counts[memberID] = struct{ NormalShifts, LongShifts int }{
+			NormalShifts: normalShifts,
+			LongShifts:   longShifts,
+		}
+	}
+
+	return counts, rows.Err()
 }

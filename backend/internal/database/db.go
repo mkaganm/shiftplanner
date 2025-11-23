@@ -83,6 +83,8 @@ func createSchema() error {
 		user_id INTEGER NOT NULL,
 		name TEXT NOT NULL,
 		created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+		hidden_normal_shifts INTEGER DEFAULT 0,
+		hidden_long_shifts INTEGER DEFAULT 0,
 		FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
 	);`
 
@@ -146,6 +148,11 @@ func createSchema() error {
 	if _, err := DB.Exec(createMembersTable); err != nil {
 		return err
 	}
+
+	// Migration: Add hidden shift columns if they don't exist
+	// Try to add columns (will fail silently if they already exist)
+	DB.Exec("ALTER TABLE members ADD COLUMN hidden_normal_shifts INTEGER DEFAULT 0")
+	DB.Exec("ALTER TABLE members ADD COLUMN hidden_long_shifts INTEGER DEFAULT 0")
 
 	if _, err := DB.Exec(createShiftsTable); err != nil {
 		return err

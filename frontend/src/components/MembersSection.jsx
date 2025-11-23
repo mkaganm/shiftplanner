@@ -4,13 +4,17 @@ import { useApp } from '../context/AppContext';
 import './MembersSection.css';
 
 export function MembersSection() {
-  const { members, createMember, deleteMember, leaveDays, loadLeaveDays, createLeaveDay, deleteLeaveDay, loading, formatDate } = useApp();
+  const { members, createMember, deleteMember, leaveDays, loadLeaveDays, createLeaveDay, deleteLeaveDay, loading, formatDate, importShifts } = useApp();
   const [name, setName] = useState('');
   const [error, setError] = useState('');
   const [leaveStartDate, setLeaveStartDate] = useState('');
   const [leaveEndDate, setLeaveEndDate] = useState('');
   const [leaveError, setLeaveError] = useState('');
   const [showLeaveModal, setShowLeaveModal] = useState(null);
+  const [importFile, setImportFile] = useState(null);
+  const [importError, setImportError] = useState('');
+  const [importResult, setImportResult] = useState(null);
+  const [importing, setImporting] = useState(false);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -108,6 +112,46 @@ export function MembersSection() {
     return leaveDays.filter(ld => ld.member_id === memberId);
   };
 
+  const handleFileChange = (e) => {
+    const file = e.target.files[0];
+    if (file) {
+      const ext = file.name.toLowerCase().split('.').pop();
+      if (ext !== 'csv' && ext !== 'xlsx' && ext !== 'xls') {
+        setImportError('Please select a CSV or Excel file (.csv, .xlsx, .xls)');
+        setImportFile(null);
+        return;
+      }
+      setImportFile(file);
+      setImportError('');
+      setImportResult(null);
+    }
+  };
+
+  const handleImport = async (e) => {
+    e.preventDefault();
+    if (!importFile) {
+      setImportError('Please select a file');
+      return;
+    }
+
+    setImporting(true);
+    setImportError('');
+    setImportResult(null);
+
+    try {
+      const result = await importShifts(importFile);
+      setImportResult(result);
+      setImportFile(null);
+      // Reset file input
+      const fileInput = document.getElementById('import-file');
+      if (fileInput) fileInput.value = '';
+    } catch (err) {
+      setImportError(err.message || 'Failed to import file');
+    } finally {
+      setImporting(false);
+    }
+  };
+
   return (
     <section className="section">
       <h2>Team Members</h2>
@@ -123,6 +167,67 @@ export function MembersSection() {
         </button>
       </form>
       {error && <div className="error-message">{error}</div>}
+      
+      {/* Import Section */}
+      <div style={{ marginTop: '24px', padding: '16px', background: '#f8f9fa', borderRadius: '8px', border: '1px solid #e9ecef' }}>
+        <h3 style={{ margin: '0 0 12px 0', fontSize: '16px', fontWeight: '600' }}>Import from CSV/Excel</h3>
+        <p style={{ margin: '0 0 12px 0', fontSize: '13px', color: '#6c757d' }}>
+          Upload a CSV or Excel file with date in first column and name in second column. Members will be created automatically if they don't exist.
+        </p>
+        <form onSubmit={handleImport} style={{ display: 'flex', gap: '8px', alignItems: 'flex-start', flexWrap: 'wrap' }}>
+          <input
+            id="import-file"
+            type="file"
+            accept=".csv,.xlsx,.xls"
+            onChange={handleFileChange}
+            disabled={importing || loading}
+            style={{ flex: '1', minWidth: '200px', padding: '8px', border: '1px solid #ced4da', borderRadius: '4px', fontSize: '14px' }}
+          />
+          <button
+            type="submit"
+            disabled={!importFile || importing || loading}
+            style={{
+              padding: '8px 16px',
+              background: importing ? '#6c757d' : '#007bff',
+              color: 'white',
+              border: 'none',
+              borderRadius: '4px',
+              cursor: importing || !importFile ? 'not-allowed' : 'pointer',
+              fontSize: '14px',
+              fontWeight: '500'
+            }}
+          >
+            {importing ? 'Importing...' : 'Import'}
+          </button>
+        </form>
+        {importError && (
+          <div className="error-message" style={{ marginTop: '12px', padding: '12px', background: '#fee', border: '1px solid #fcc', borderRadius: '6px', color: '#c33' }}>
+            {importError}
+          </div>
+        )}
+        {importResult && (
+          <div style={{ marginTop: '12px', padding: '12px', background: '#d4edda', border: '1px solid #c3e6cb', borderRadius: '6px', color: '#155724' }}>
+            <div style={{ fontWeight: '600', marginBottom: '8px' }}>Import completed successfully!</div>
+            <div style={{ fontSize: '13px' }}>
+              <div>Members created: {importResult.members_created || 0}</div>
+              <div>Shifts created: {importResult.shifts_created || 0}</div>
+              {importResult.errors && importResult.errors.length > 0 && (
+                <div style={{ marginTop: '8px', color: '#856404' }}>
+                  <div style={{ fontWeight: '600' }}>Errors ({importResult.errors.length}):</div>
+                  <ul style={{ margin: '4px 0 0 0', paddingLeft: '20px' }}>
+                    {importResult.errors.slice(0, 5).map((err, idx) => (
+                      <li key={idx} style={{ fontSize: '12px' }}>{err}</li>
+                    ))}
+                    {importResult.errors.length > 5 && (
+                      <li style={{ fontSize: '12px', fontStyle: 'italic' }}>... and {importResult.errors.length - 5} more errors</li>
+                    )}
+                  </ul>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+      </div>
       <div className="members-list">
         {members.length === 0 ? (
           <div className="empty-state">No members added yet</div>

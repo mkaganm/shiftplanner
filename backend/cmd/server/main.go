@@ -82,6 +82,7 @@ func main() {
 	apiGroup.Delete("/members/:id", api.DeleteMember)
 	apiGroup.Get("/shifts", api.GetShifts)
 	apiGroup.Post("/shifts/generate", api.GenerateShifts)
+	apiGroup.Post("/shifts/import", api.ImportShifts)
 	apiGroup.Delete("/shifts", api.ClearAllShifts)
 	apiGroup.Get("/stats", api.GetStats)
 	apiGroup.Get("/leave-days", api.GetLeaveDays)

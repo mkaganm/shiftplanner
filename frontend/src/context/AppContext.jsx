@@ -84,6 +84,12 @@ export function AppProvider({ children }) {
       await loadMembers();
       await loadStats();
       await loadShiftsForCurrentMonth();
+      // Reload leave days to remove deleted member's leave days
+      const start = new Date(currentYear, currentMonth, 1);
+      const end = new Date(currentYear, currentMonth + 1, 0);
+      const startDate = formatDate(start);
+      const endDate = formatDate(end);
+      await loadLeaveDays(null, startDate, endDate);
     } catch (error) {
       throw error;
     }
@@ -115,6 +121,18 @@ export function AppProvider({ children }) {
       await shiftsAPI.updateForDate(date, memberId);
       await loadShiftsForCurrentMonth();
       await loadStats();
+    } catch (error) {
+      throw error;
+    }
+  };
+
+  const importShifts = async (file) => {
+    try {
+      const result = await shiftsAPI.import(file);
+      await loadMembers();
+      await loadShiftsForCurrentMonth();
+      await loadStats();
+      return result;
     } catch (error) {
       throw error;
     }
@@ -222,6 +240,7 @@ export function AppProvider({ children }) {
     createLeaveDay,
     deleteLeaveDay,
     updateShiftForDate,
+    importShifts,
     previousMonth,
     nextMonth,
     formatDate

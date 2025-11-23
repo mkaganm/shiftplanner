@@ -73,6 +73,12 @@ export function CalendarSection() {
         return false;
       }
       
+      // Check if member still exists
+      const memberExists = members.some(m => m.id === leaveDay.member_id);
+      if (!memberExists) {
+        return false; // Skip leave days for deleted members
+      }
+      
       // Handle both string and Date object formats
       let leaveDateStr;
       
@@ -204,6 +210,12 @@ export function CalendarSection() {
       const dayLeaveDays = leaveDays.filter((leaveDay) => {
         if (!leaveDay || !leaveDay.leave_date) {
           return false;
+        }
+        
+        // Check if member still exists
+        const memberExists = members.some(m => m.id === leaveDay.member_id);
+        if (!memberExists) {
+          return false; // Skip leave days for deleted members
         }
         
         let leaveDateStr;

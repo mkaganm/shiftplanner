@@ -137,6 +137,44 @@ export const shiftsAPI = {
     });
   },
   
+  async import(file) {
+    const token = localStorage.getItem('token');
+    const formData = new FormData();
+    formData.append('file', file);
+    
+    const headers = {};
+    if (token) {
+      headers['Authorization'] = token;
+    }
+    
+    const API_BASE = API_BASE_URL ? `${API_BASE_URL}/api` : '/api';
+    const response = await fetch(`${API_BASE}/shifts/import`, {
+      method: 'POST',
+      headers,
+      body: formData,
+      credentials: 'include'
+    });
+    
+    if (response.status === 401) {
+      localStorage.removeItem('token');
+      throw new APIError('Session expired. Please login again.', 401);
+    }
+    
+    if (!response.ok) {
+      const errorText = await response.text();
+      let errorMsg = `Request failed: ${response.status}`;
+      try {
+        const errorJson = JSON.parse(errorText);
+        errorMsg = errorJson.error || errorMsg;
+      } catch {
+        errorMsg = errorText || errorMsg;
+      }
+      throw new APIError(errorMsg, response.status);
+    }
+    
+    return await response.json();
+  },
+  
   async clearAll() {
     return await apiRequest('/shifts', {
       method: 'DELETE'
